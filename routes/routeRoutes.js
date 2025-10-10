@@ -54,27 +54,21 @@ function colorFromScore(score) {
  *         description: List of alternative routes with safety scores
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 routes:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       summary:
- *                         type: string
- *                       polyline:
- *                         type: string
- *                       distance:
- *                         type: object
- *                       duration:
- *                         type: object
- *                       safety_score:
- *                         type: number
- *                         description: Average safety score for route (1-10)
- *                       color:
- *                         type: string
+  *             schema:
+  *               type: object
+  *               properties:
+  *                 routes:
+  *                   type: array
+  *                   items:
+  *                     $ref: '#/components/schemas/Route'
+  *             example:
+  *               routes:
+  *                 - summary: 'Main St'
+  *                   polyline: 'abcd'
+  *                   distance: { text: '3 km', value: 3000 }
+  *                   duration: { text: '8 mins', value: 480 }
+  *                   safety_score: 7.1
+  *                   color: 'green'
  *       '400':
  *         description: Missing origin or destination
  *         content:

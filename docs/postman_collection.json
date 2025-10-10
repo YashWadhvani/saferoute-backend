@@ -1,0 +1,77 @@
+{
+  "info": {
+    "name": "SafeRoute API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Send OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/auth/send-otp",
+        "body": { "mode": "raw", "raw": "{ \"identifier\": \"{{identifier}}\" }" }
+      }
+    },
+    {
+      "name": "Auth - Verify OTP",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": "{{baseUrl}}/api/auth/verify-otp",
+        "body": { "mode": "raw", "raw": "{ \"identifier\": \"{{identifier}}\", \"otp\": \"{{otp}}\" }" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const res = pm.response.json();",
+              "if (res.token) { pm.environment.set('jwt', res.token); }",
+              "pm.test('token present', () => pm.expect(res).to.have.property('token'))"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users - Get Me",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{jwt}}" } ],
+        "url": "{{baseUrl}}/api/users/me"
+      }
+    },
+    {
+      "name": "Reports - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{jwt}}" }
+        ],
+        "url": "{{baseUrl}}/api/reports",
+        "body": { "mode": "raw", "raw": "{ \"type\": \"dark_area\", \"description\": \"Test\", \"location\": { \"lat\": 40.7128, \"lng\": -74.0060 } }" }
+      }
+    },
+    {
+      "name": "SOS - Trigger",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{jwt}}" }
+        ],
+        "url": "{{baseUrl}}/api/sos/trigger",
+        "body": { "mode": "raw", "raw": "{ \"location\": { \"lat\": 40.7128, \"lng\": -74.0060 } }" }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "identifier", "value": "+15550001111" },
+    { "key": "otp", "value": "123456" }
+  ]
+}

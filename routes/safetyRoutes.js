@@ -52,10 +52,20 @@ const router = express.Router();
  *         description: Saved safety cell document
  *         content:
  *           application/json:
- *             schema:
- *               type: object
+  *             schema:
+  *               $ref: '#/components/schemas/SafetyScore'
+  *             example:
+  *               _id: '64f1b2c3d4e5f6a7b8c9d999'
+  *               areaId: 'dr5regw'
+  *               score: 6.5
+  *               factors: { lighting: 7, crowd: 6, police: 5, incidents: 4, accidents: 3 }
+  *               lastUpdated: '2025-10-09T12:00:00.000Z'
  *       '400':
  *         description: Missing areaId and lat/lng
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       '500':
  *         description: Server error
  *     security:
@@ -99,10 +109,28 @@ router.post("/update", async (req, res) => {
  *     responses:
  *       '200':
  *         description: Safety cell document
+ *         content:
+ *           application/json:
+  *             schema:
+  *               $ref: '#/components/schemas/SafetyScore'
+  *             example:
+  *               _id: '64f1b2c3d4e5f6a7b8c9d999'
+  *               areaId: 'dr5regw'
+  *               score: 6.5
+  *               factors: { lighting: 7, crowd: 6, police: 5, incidents: 4, accidents: 3 }
+  *               lastUpdated: '2025-10-09T12:00:00.000Z'
  *       '404':
  *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       '500':
  *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get("/:areaId", async (req, res) => {
   try {

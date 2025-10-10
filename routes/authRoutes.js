@@ -40,12 +40,12 @@ const lastSent = new Map();
  *         description: OTP sent
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: OTP sent
+  *             schema:
+  *               type: object
+  *               properties:
+  *                 message: { type: string }
+  *             example:
+  *               message: "OTP sent"
  *       '400':
  *         description: Missing or invalid request
  *         content:
@@ -126,15 +126,13 @@ router.post("/send-otp", async (req, res) => {
  *         description: Verified - returns JWT and user object
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 token:
- *                   type: string
- *                   description: JWT token
- *                 user:
- *                   type: object
- *                   description: User document
+  *             schema:
+  *               $ref: '#/components/schemas/AuthResponse'
+  *             example:
+  *               token: 'eyJhbGciOi...'
+  *               user:
+  *                 _id: '64f1b2c3d4e5f6a7b8c9d012'
+  *                 name: 'Jane Doe'
  *       '400':
  *         description: Missing fields, invalid or expired OTP
  *         content:
