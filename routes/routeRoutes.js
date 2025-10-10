@@ -152,4 +152,176 @@ router.get("/compare", async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/routes/compute:
+ *   post:
+ *     summary: Compute route(s), decode polyline(s), ensure SafetyScore cells exist for each geohash along the route
+ *     tags: [Routes]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [origin,destination]
+ *             properties:
+ *               origin:
+ *                 type: string
+ *               destination:
+ *                 type: string
+ *               alternatives:
+ *                 type: boolean
+ *                 description: Whether to request alternative routes (default true)
+ *     responses:
+ *       '200':
+ *         description: Routes processed and SafetyScore cells ensured
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 routes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       summary: { type: string }
+ *                       polyline: { type: string }
+ *                       decoded_point_count: { type: number }
+ *                       created_cells_count: { type: number }
+ *       '400':
+ *         description: Missing origin/destination
+ *       '500':
+ *         description: Server error
+ */
+router.post('/compute', async (req, res) => {
+  try {
+    const { origin, destination } = req.body;
+    const alternatives = req.body.alternatives !== false; // default true
+    if (!origin || !destination) return res.status(400).json({ error: 'origin and destination required' });
+
+    const apiUrl = `https://routes.googleapis.com/directions/v2:computeRoutes?key=${GOOGLE_KEY}`;
+
+    // build request body for Routes API
+    function parseLoc(s) {
+      if (!s) return null;
+      const parts = String(s).split(',').map(p => p.trim());
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        return { latLng: { latitude: Number(parts[0]), longitude: Number(parts[1]) } };
+      }
+      return { address: s };
+    }
+
+    const body = {
+      origin: parseLoc(origin),
+      destination: parseLoc(destination),
+      travelMode: 'DRIVE',
+      computeAlternativeRoutes: true
+    };
+
+  const fieldMask = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline';
+  const gres = await axios.post(apiUrl, body, { headers: { 'Content-Type': 'application/json', 'X-Goog-FieldMask': fieldMask } });
+    if (!gres.data || !gres.data.routes || !gres.data.routes.length) return res.status(404).json({ error: 'No routes found' });
+
+    const results = [];
+    for (const route of gres.data.routes) {
+      // Routes API returns encoded polyline in different places depending on API version;
+      // try a few known fields defensively.
+      // Extract encoded polyline string from possible shapes returned by Routes API
+      let encoded = null;
+      try {
+        if (route.polyline) {
+          if (typeof route.polyline === 'string') encoded = route.polyline;
+          else if (typeof route.polyline.encodedPolyline === 'string') encoded = route.polyline.encodedPolyline;
+          else if (typeof route.polyline.encodedPolyline === 'object' && typeof route.polyline.encodedPolyline.polyline === 'string') encoded = route.polyline.encodedPolyline.polyline;
+          else if (typeof route.polyline.points === 'string') encoded = route.polyline.points;
+        }
+        if (!encoded) {
+          if (route.overview_polyline && typeof route.overview_polyline.points === 'string') encoded = route.overview_polyline.points;
+          else if (typeof route.encodedPolyline === 'string') encoded = route.encodedPolyline;
+        }
+      } catch (e) {
+        console.warn('Error extracting polyline', e.message);
+      }
+
+      if (!encoded) {
+        console.warn('No encoded polyline found on route, skipping');
+        continue;
+      }
+
+      let pts = [];
+      // debug: show a short snippet of the encoded polyline when diagnosing issues
+      try { console.log('Decoded polyline snippet:', String(encoded).slice(0,200)); } catch(e){}
+
+      // Try decoding with a few fallback cleaning steps to handle various formats/escaping
+      const tryDecode = (str) => {
+        try {
+          const p = polyline.decode(str);
+          if (Array.isArray(p) && p.length) return p;
+        } catch (e) {
+          // ignore
+        }
+        return null;
+      };
+
+      pts = tryDecode(encoded) || [];
+
+      if (!pts.length) {
+        // strip surrounding braces sometimes present
+        let cleaned = encoded;
+        if (cleaned.startsWith('{') && cleaned.endsWith('}')) cleaned = cleaned.slice(1, -1);
+        // unescape double backslashes
+        cleaned = cleaned.replace(/\\\\/g, '\\');
+        pts = tryDecode(cleaned) || [];
+        if (pts.length) encoded = cleaned;
+      }
+
+      if (!pts.length) {
+        // last resort: attempt JSON unescape of escape sequences
+        try {
+          const unescaped = JSON.parse('"' + String(encoded).replace(/"/g, '\\"') + '"');
+          pts = tryDecode(unescaped) || [];
+          if (pts.length) encoded = unescaped;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      console.log('Decoded points count:', pts.length);
+
+      // compute all geohashes for route points
+      const hashes = new Set();
+      for (const [lat, lng] of pts) hashes.add(encode(lat, lng));
+      const hashArray = Array.from(hashes);
+
+      // find existing cells
+      const existing = await SafetyScore.find({ areaId: { $in: hashArray } }).lean();
+      const existingSet = new Set(existing.map(e => e.areaId));
+
+      // identify missing
+      const missing = hashArray.filter(h => !existingSet.has(h));
+
+      // upsert missing using bulkWrite for efficiency
+      if (missing.length) {
+        const ops = missing.map(h => ({ updateOne: { filter: { areaId: h }, update: { $setOnInsert: { areaId: h } }, upsert: true } }));
+        await SafetyScore.bulkWrite(ops);
+      }
+
+      results.push({
+        summary: route.summary || '',
+        polyline: encoded,
+        decoded_point_count: pts.length,
+        created_cells_count: missing.length,
+        created_cells: missing.slice(0, 50)
+      });
+    }
+
+    res.json({ routes: results });
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
