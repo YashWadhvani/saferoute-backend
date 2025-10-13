@@ -61,6 +61,14 @@ function setupSwagger(app) {
                     accidents: { type: 'number', minimum: 0, maximum: 10 }
                   }
                 },
+                nearestPolice: {
+                  type: 'object',
+                  description: 'Minimal reference to nearest police POI; use /api/police/{placeId} to fetch details',
+                  properties: {
+                    placeId: { type: 'string' },
+                    distance_m: { type: 'number' }
+                  }
+                },
                 lastUpdated: { type: 'string', format: 'date-time' }
               },
               example: {
@@ -68,9 +76,67 @@ function setupSwagger(app) {
                 areaId: 'dr5regw',
                 score: 6.5,
                 factors: { lighting: 7, crowd: 6, police: 5, incidents: 4, accidents: 3 },
+                nearestPolice: { placeId: 'ChI...', distance_m: 320 },
                 lastUpdated: '2025-10-09T12:00:00.000Z'
               }
             },
+          PoliceStation: {
+            type: 'object',
+            properties: {
+              _id: { type: 'string' },
+              placeId: { type: 'string' },
+              name: { type: 'string' },
+              address: { type: 'string' },
+              phone: { type: 'string' },
+              location: {
+                type: 'object',
+                properties: {
+                  geohash: { type: 'string' },
+                  geohash: { type: 'string' },
+                  geo: { type: 'object', properties: { type: { type: 'string' }, coordinates: { type: 'array', items: { type: 'number' } } } }
+                }
+              },
+              lastUpdated: { type: 'string', format: 'date-time' }
+            },
+            example: {
+              placeId: 'ChI...',
+              name: 'Ahmedabad City Police Force',
+              address: 'Rambaug road, Maninagar, Ahmedabad',
+              phone: '+91 79 2546 0089',
+              location: { geohash: 'ts5em1y', geo: { type: 'Point', coordinates: [72.5978149, 23.0262505] } },
+              lastUpdated: '2025-10-12T10:00:00.000Z'
+            }
+          },
+          PoliceStationList: {
+            type: 'object',
+            properties: {
+              count: { type: 'integer' },
+              stations: { type: 'array', items: { $ref: '#/components/schemas/PoliceStation' } }
+            }
+          },
+          GeoJSONFeature: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', example: 'Feature' },
+              geometry: { type: 'object' },
+              properties: { type: 'object' }
+            }
+          },
+          GeoJSONFeatureCollection: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', example: 'FeatureCollection' },
+              features: { type: 'array', items: { $ref: '#/components/schemas/GeoJSONFeature' } }
+            }
+          },
+          MapNearestResponse: {
+            type: 'object',
+            properties: {
+              processed: { type: 'integer' },
+              updated: { type: 'integer' },
+              results: { type: 'array', items: { type: 'object' } }
+            }
+          },
           Route: {
               type: 'object',
               required: ['polyline','safety_score'],
@@ -79,16 +145,26 @@ function setupSwagger(app) {
                 polyline: { type: 'string' },
                 distance: { type: 'object', description: 'Google distance object { text, value }' },
                 duration: { type: 'object', description: 'Google duration object { text, value }' },
+                decoded_point_count: { type: 'integer' },
+                areaIds: { type: 'array', items: { type: 'string' }, description: 'Geohash area ids sampled along the route' },
+                created_cells_count: { type: 'integer', description: 'Number of SafetyScore cells created during this request' },
+                created_cells: { type: 'array', items: { type: 'string' }, description: 'List of created areaIds (first 50)' },
                 safety_score: { type: ['number', 'string'], description: 'Average safety score or "N/A"' },
-                color: { type: 'string' }
+                color: { type: 'string' },
+                tags: { type: 'array', items: { type: 'string' }, description: "Route tags such as 'safest','fastest','shortest'" }
               },
               example: {
                 summary: 'I-90 W',
                 polyline: 'abcd1234encoded',
                 distance: { text: '5.4 km', value: 5400 },
                 duration: { text: '12 mins', value: 720 },
+                decoded_point_count: 120,
+                areaIds: ['dr5regw','dr5regx'],
+                created_cells_count: 0,
+                created_cells: [],
                 safety_score: 7.2,
-                color: 'green'
+                color: 'green',
+                tags: ['safest']
               }
             },
           Report: {
@@ -153,7 +229,66 @@ function setupSwagger(app) {
         }
       }
     },
-    apis: ['./routes/*.js']
+    apis: ['./routes/*.js'],
+    // Add explicit paths for the unified routes compare endpoint
+    paths: {
+      '/api/routes/compare': {
+        post: {
+          summary: 'Compare routes between origin and destination (unified)',
+          tags: ['Routes'],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['origin','destination'],
+                  properties: {
+                    origin: { type: 'string', description: 'Origin address or lat,lng' },
+                    destination: { type: 'string', description: 'Destination address or lat,lng' },
+                    single: { type: 'boolean', description: 'Return a single preferred route' },
+                    prefer: { type: 'string', description: "Preferred selector: 'safest'|'fastest'|'shortest'" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': {
+              description: 'List of alternative routes or a single route when single=true',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      routes: { type: 'array', items: { $ref: '#/components/schemas/Route' } },
+                      route: { $ref: '#/components/schemas/Route' }
+                    }
+                  }
+                }
+              }
+            },
+            '400': { description: 'Missing origin/destination', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            '404': { description: 'No routes found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        },
+        get: {
+          summary: 'GET alias for compare (origin/destination in query)',
+          tags: ['Routes'],
+          parameters: [
+            { name: 'origin', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'destination', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'single', in: 'query', required: false, schema: { type: 'boolean' } },
+            { name: 'prefer', in: 'query', required: false, schema: { type: 'string' } }
+          ],
+          responses: {
+            '200': { description: 'Success', content: { 'application/json': { schema: { type: 'object', properties: { routes: { type: 'array', items: { $ref: '#/components/schemas/Route' } }, route: { $ref: '#/components/schemas/Route' } } } } } },
+            '400': { description: 'Missing origin/destination', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            '404': { description: 'No routes found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      }
+    }
   };
 
   const spec = swaggerJsdoc(options);

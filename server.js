@@ -10,11 +10,15 @@ const routeRoutes = require("./routes/routeRoutes");
 const userRoutes = require("./routes/userRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const sosRoutes = require("./routes/sosRoutes");
+const policeStationRoutes = require("./routes/policeStationRoutes");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
+const path = require('path');
+// serve docs map and use map.html as the directory index so /map/ works
+app.use('/map', express.static(path.join(__dirname, 'docs'), { index: 'map.html' }));
 
 const setupSwagger = require('./swagger');
 setupSwagger(app);
@@ -29,6 +33,7 @@ app.use("/api/routes", routeRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/sos', sosRoutes);
+app.use('/api/police', policeStationRoutes);
 
 app.get("/", (req,res)=> res.send("SafeRoute Backend OK"));
 const PORT = process.env.PORT || 5000;

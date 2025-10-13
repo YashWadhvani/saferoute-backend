@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SafeRoute GeoHash Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>html,body,#map{height:100%;margin:0}</style>
+</head>
+<body>
+  <div style="padding:8px; background:#fff; z-index:1000; position:absolute; left:8px; top:8px;">
+    <div id="controls" style="width:320px; font-family: Arial, Helvetica, sans-serif; font-size:13px;">
+      <div style="font-weight:600; margin-bottom:6px">SafeRoute Map</div>
+      <label style="display:block; margin-bottom:4px">Single Geohash:</label>
+      <input id="singleGeohash" placeholder="e.g. ts5em1y" style="width:100%; padding:6px; box-sizing:border-box; margin-bottom:8px" />
+      <div style="display:flex; gap:8px; margin-bottom:10px">
+        <button id="showGeohash" style="flex:1">Show Geohash</button>
+        <button id="zoomGeohash" style="flex:1">Zoom to Geohash</button>
+      </div>
+
+      <label style="display:block; margin-bottom:4px">AreaIds (comma-separated):</label>
+      <textarea id="areaIds" rows="3" style="width:100%; padding:6px; box-sizing:border-box; margin-bottom:8px" placeholder="ts5em1y,ts5em4n,..."></textarea>
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <button id="show" style="flex:1">Show Areas</button>
+        <button id="clear" style="flex:1">Clear</button>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center">
+        <button id="showPolice" style="flex:1">Show Police</button>
+        <input id="policeLimit" placeholder="limit" style="width:70px; padding:6px; box-sizing:border-box" value="1000" />
+      </div>
+    </div>
+  </div>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+  const map = L.map('map', { zoomControl: true }).setView([0,0],2);
+    const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+    });
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution: '&copy; OpenStreetMap contributors'});
+    // Esri labels / reference layer (place names, administrative labels)
+    const esriLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Labels &copy; Esri'
+    });
+  // add satellite and labels by default
+  esriSat.addTo(map);
+  esriLabels.addTo(map);
+  L.control.layers({ 'Esri Satellite': esriSat, 'OpenStreetMap': osm }, { 'Labels': esriLabels }).addTo(map);
+  // move Leaflet zoom controls to top-right so they don't overlap inputs
+  map.zoomControl.setPosition('topright');
+    // layer groups
+    let geoLayer = L.layerGroup().addTo(map);
+    let policeLayer = L.layerGroup().addTo(map);
+
+    document.getElementById('show').addEventListener('click', async ()=>{
+      geoLayer.clearLayers();
+      const val = document.getElementById('areaIds').value.trim();
+      if(!val) return alert('enter areaIds');
+      const res = await fetch('/api/safety/geojson?areaIds=' + encodeURIComponent(val));
+      const geo = await res.json();
+      if(!geo || !geo.features) return alert('no data');
+      const layer = L.geoJSON(geo, {
+        style: f => ({ color: scoreColor(f.properties.score), weight:1, fillOpacity:0.5 }),
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties || {};
+          const areaId = p.areaId || 'unknown';
+          const score = p.score == null ? 'N/A' : p.score;
+          layer.bindPopup(`<strong>${areaId}</strong><br/>Score: ${score}`);
+        }
+      });
+      geoLayer.addLayer(layer);
+      map.fitBounds(layer.getBounds());
+    });
+
+    document.getElementById('clear').addEventListener('click', ()=>{
+      geoLayer.clearLayers(); policeLayer.clearLayers(); map.setView([0,0],2);
+    });
+    document.getElementById('showPolice').addEventListener('click', async ()=>{
+      policeLayer.clearLayers();
+      const limit = parseInt(document.getElementById('policeLimit').value || '1000', 10);
+      const res = await fetch('/api/police?limit=' + encodeURIComponent(limit));
+      const list = await res.json();
+      if(!Array.isArray(list)) return alert('unexpected response');
+      for(const s of list){
+        try{
+          const coords = s.location && s.location.geo && s.location.geo.coordinates;
+          if(!coords || coords.length < 2) continue;
+          const lng = coords[0], lat = coords[1];
+          const marker = L.circleMarker([lat,lng], { radius:6, color:'#1e88e5', fillColor:'#1e88e5', fillOpacity:0.95 });
+          const html = `<strong>${s.name || 'Police'}</strong><br/>${s.address || ''}<br/>Phone: ${s.phone || 'N/A'}<br/>placeId: ${s.placeId || ''}`;
+          marker.bindPopup(html);
+          policeLayer.addLayer(marker);
+        }catch(e){console.warn('marker error', e)}
+      }
+      if(policeLayer.getLayers().length) map.fitBounds(policeLayer.getBounds());
+    });
+
+    // Single geohash button - reuse geojson endpoint for one geohash
+    document.getElementById('showGeohash').addEventListener('click', async ()=>{
+      const g = document.getElementById('singleGeohash').value.trim();
+      if(!g) return alert('enter geohash');
+      geoLayer.clearLayers();
+      const res = await fetch('/api/safety/geojson?areaIds=' + encodeURIComponent(g));
+      const geo = await res.json();
+      if(!geo || !geo.features || !geo.features.length) return alert('no data for geohash');
+      const layer = L.geoJSON(geo, { style: f => ({ color: scoreColor(f.properties.score), weight:1, fillOpacity:0.6 }) });
+      geoLayer.addLayer(layer);
+      map.fitBounds(layer.getBounds());
+    });
+
+    // Zoom to geohash center without adding polygon
+    document.getElementById('zoomGeohash').addEventListener('click', async ()=>{
+      const g = document.getElementById('singleGeohash').value.trim();
+      if(!g) return alert('enter geohash');
+      const res = await fetch('/api/safety/geojson?areaIds=' + encodeURIComponent(g));
+      const geo = await res.json();
+      if(!geo || !geo.features || !geo.features.length) return alert('no data for geohash');
+      const bounds = L.geoJSON(geo).getBounds();
+      map.fitBounds(bounds.pad(0.75));
+    });
+    function scoreColor(s){ if(s==='N/A') return 'gray'; if(s>=7.5) return 'green'; if(s>=5) return 'yellow'; return 'red'; }
+  </script>
+</body>
+</html>

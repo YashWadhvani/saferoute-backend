@@ -14,14 +14,6 @@ const GOOGLE_KEY = process.env.GOOGLE_MAPS_KEY;
  *     description: Route comparison and mapping endpoints
  */
 
-// Helper: sample indices to limit to ~30 samples per route
-function sampleIndices(n, maxSamples = 30) {
-  const step = Math.max(1, Math.ceil(n / maxSamples));
-  const indices = [];
-  for (let i = 0; i < n; i += step) indices.push(i);
-  return indices;
-}
-
 // Color coding
 function colorFromScore(score) {
   if (score === "N/A") return "gray";
@@ -30,10 +22,210 @@ function colorFromScore(score) {
   return "red";
 }
 
+// Shared helpers
+function parseLoc(s) {
+  if (!s) return null;
+  const parts = String(s).split(',').map(p => p.trim());
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return { latLng: { latitude: Number(parts[0]), longitude: Number(parts[1]) } };
+  }
+  return { address: s };
+}
+
+function extractEncodedPolyline(route) {
+  try {
+    if (route.polyline) {
+      if (typeof route.polyline === 'string') return route.polyline;
+      if (typeof route.polyline.encodedPolyline === 'string') return route.polyline.encodedPolyline;
+      if (typeof route.polyline.encodedPolyline === 'object' && typeof route.polyline.encodedPolyline.polyline === 'string') return route.polyline.encodedPolyline.polyline;
+      if (typeof route.polyline.points === 'string') return route.polyline.points;
+    }
+    if (route.overview_polyline && typeof route.overview_polyline.points === 'string') return route.overview_polyline.points;
+    if (typeof route.encodedPolyline === 'string') return route.encodedPolyline;
+  } catch (e) {
+    // fall through
+  }
+  return null;
+}
+
+const tryDecodePolyline = (encoded) => {
+  const tryDecode = (str) => {
+    try {
+      const p = polyline.decode(str);
+      if (Array.isArray(p) && p.length) return p;
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  };
+
+  let pts = tryDecode(encoded) || [];
+  if (pts.length) return { pts, encoded };
+
+  // strip surrounding braces
+  let cleaned = encoded;
+  if (cleaned && cleaned.startsWith('{') && cleaned.endsWith('}')) cleaned = cleaned.slice(1, -1);
+  cleaned = cleaned.replace(/\\\\/g, '\\');
+  pts = tryDecode(cleaned) || [];
+  if (pts.length) return { pts, encoded: cleaned };
+
+  try {
+    const unescaped = JSON.parse('"' + String(encoded).replace(/"/g, '\\"') + '"');
+    pts = tryDecode(unescaped) || [];
+    if (pts.length) return { pts, encoded: unescaped };
+  } catch (e) {
+    // ignore
+  }
+
+  return { pts: [], encoded: encoded };
+};
+
+async function ensureSafetyCells(hashArray) {
+  if (!hashArray || !hashArray.length) return { missing: [], created: 0 };
+  const existing = await SafetyScore.find({ areaId: { $in: hashArray } }).lean();
+  const existingSet = new Set(existing.map(e => e.areaId));
+  const missing = hashArray.filter(h => !existingSet.has(h));
+  if (missing.length) {
+    const ops = missing.map(h => ({ updateOne: { filter: { areaId: h }, update: { $setOnInsert: { areaId: h } }, upsert: true } }));
+    await SafetyScore.bulkWrite(ops);
+  }
+  return { missing, created: missing.length };
+}
+
+function formatDistance(r){
+  try{
+    if (r.legs && Array.isArray(r.legs) && r.legs[0] && r.legs[0].distance) return r.legs[0].distance;
+    if (r.distanceMeters != null) return { text: `${(r.distanceMeters/1000).toFixed(2)} km`, value: r.distanceMeters };
+  }catch(e){}
+  return null;
+}
+
+function formatDuration(r){
+  try{
+    if (r.legs && Array.isArray(r.legs) && r.legs[0] && r.legs[0].duration) return r.legs[0].duration;
+    if (r.duration != null && typeof r.duration === 'object' && r.duration.seconds != null) return { text: `${Math.round(r.duration.seconds/60)} mins`, value: r.duration.seconds };
+    if (r.durationSeconds != null) return { text: `${Math.round(r.durationSeconds/60)} mins`, value: r.durationSeconds };
+  }catch(e){}
+  return null;
+}
+
+// process provider routes into our normalized result items
+async function processProviderRoutes(routes, opts = {}) {
+  const showProvider = !!process.env.SHOW_PROVIDER_BODY;
+  const results = [];
+  for (const route of routes) {
+    const encodedRaw = extractEncodedPolyline(route);
+    if (!encodedRaw) {
+      if (showProvider) console.warn('No encoded polyline found on route (provider snippet):', JSON.stringify(route).slice(0,1000));
+      continue;
+    }
+
+    const { pts, encoded } = tryDecodePolyline(encodedRaw);
+    if (!pts.length) {
+      if (showProvider) console.warn('Failed to decode polyline (snippet):', String(encodedRaw).slice(0,200));
+    }
+
+    // compute geohashes (do not upsert here; scoring will ensure cells then re-query)
+    const hashes = new Set();
+    for (const pair of pts) {
+      if (Array.isArray(pair) && pair.length >= 2) {
+        const [lat, lng] = pair;
+        hashes.add(encode(lat, lng));
+      }
+    }
+    const hashArray = Array.from(hashes);
+
+    // extract distance/duration
+    let dist = formatDistance(route);
+    let dur = formatDuration(route);
+
+    // estimate duration if missing and distance present
+    if ((!dur || dur.value == null) && dist && dist.value != null) {
+      const avgKmph = parseFloat(process.env.ROUTES_AVG_SPEED_KMPH || '30');
+      const secs = Math.round((dist.value / 1000) / avgKmph * 3600);
+      dur = { text: `~${Math.round(secs/60)} mins`, value: secs };
+    }
+
+    results.push({
+      summary: route.summary || '',
+      polyline: encoded,
+      distance: dist,
+      duration: dur,
+      decoded_point_count: pts.length,
+      created_cells_count: 0,
+      created_cells: [],
+      areaIds: hashArray
+    });
+  }
+  return results;
+}
+
+// Score and tag results: compute safety_score, color and tags for an array of result objects
+async function scoreAndTagResults(results) {
+  // compute union of all areaIds and fetch their scores
+  const allHashes = new Set();
+  for (const r of results) {
+    if (Array.isArray(r.areaIds)) for (const h of r.areaIds) allHashes.add(h);
+  }
+  const hashArray = Array.from(allHashes);
+  let scoreMap = new Map();
+  let createdMap = new Map();
+  if (hashArray.length) {
+    // upsert missing cells in bulk first
+    const { missing, created } = await ensureSafetyCells(hashArray);
+    // record created set for reporting
+    for (const m of missing) createdMap.set(m, true);
+    // re-query so newly created docs are returned
+    const cells = await SafetyScore.find({ areaId: { $in: hashArray } }).lean();
+    for (const c of cells) scoreMap.set(c.areaId, (typeof c.score === 'number') ? c.score : 5);
+  }
+
+  // compute per-route safety_score
+  for (const r of results) {
+    const ids = Array.isArray(r.areaIds) ? r.areaIds : [];
+    if (!ids.length) {
+      r.safety_score = "N/A";
+      r.color = colorFromScore(r.safety_score);
+      continue;
+    }
+    let total = 0, count = 0;
+    for (const id of ids) {
+      const s = scoreMap.has(id) ? scoreMap.get(id) : 5; // default 5
+      total += s; count++;
+    }
+    const avg = count ? +(total / count).toFixed(2) : "N/A";
+    r.safety_score = avg;
+    r.color = colorFromScore(avg);
+    // mark created cells count for this route
+    const createdList = ids.filter(id => createdMap.has(id));
+    r.created_cells_count = createdList.length;
+    r.created_cells = createdList.slice(0,50);
+  }
+
+  // tag routes: safest, fastest, shortest
+  const numericScores = results.map((r, i) => ({ i, v: (typeof r.safety_score === 'number') ? r.safety_score : -Infinity }));
+  const safestIndex = numericScores.reduce((best, cur) => (cur.v > best.v ? cur : best), { i: -1, v: -Infinity }).i;
+
+  const durationVals = results.map((r, i) => ({ i, v: (r.duration && typeof r.duration.value === 'number') ? r.duration.value : Infinity }));
+  const fastestIndex = durationVals.reduce((best, cur) => (cur.v < best.v ? cur : best), { i: -1, v: Infinity }).i;
+
+  const distanceVals = results.map((r, i) => ({ i, v: (r.distance && typeof r.distance.value === 'number') ? r.distance.value : Infinity }));
+  const shortestIndex = distanceVals.reduce((best, cur) => (cur.v < best.v ? cur : best), { i: -1, v: Infinity }).i;
+
+  for (let i = 0; i < results.length; i++) {
+    results[i].tags = [];
+    if (i === safestIndex) results[i].tags.push('safest');
+    if (i === fastestIndex) results[i].tags.push('fastest');
+    if (i === shortestIndex) results[i].tags.push('shortest');
+  }
+
+  return results;
+}
+
 /**
  * @swagger
  * /api/routes/compare:
- *   get:
+ *   post:
  *     summary: Compare alternative routes between origin and destination and return safety scores
  *     tags: [Routes]
  *     parameters:
@@ -83,238 +275,44 @@ function colorFromScore(score) {
  *       '500':
  *         description: Server error
  */
-router.get("/compare", async (req, res) => {
+router.post('/compare', async (req, res) => {
   try {
-    const { origin, destination } = req.query;
-    if (!origin || !destination) return res.status(400).json({ error: "origin and destination required" });
-
-    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&alternatives=true&key=${GOOGLE_KEY}`;
-    const gres = await axios.get(url);
-    if (!gres.data.routes || !gres.data.routes.length) return res.status(404).json({ error: "No routes found" });
-
-    const results = [];
-    for (const route of gres.data.routes) {
-      const encoded = route.overview_polyline.points;
-      const pts = polyline.decode(encoded); // [[lat,lng],...]
-      // sample to limit DB lookups
-      const sampleIdx = sampleIndices(pts.length, 40);
-      const hashes = new Set();
-      for (const i of sampleIdx) {
-        const [lat, lng] = pts[i];
-        hashes.add(encode(lat, lng));
-      }
-
-      // fetch all safety docs for these hashes in one query
-      const hashArray = Array.from(hashes);
-      const cells = await SafetyScore.find({ areaId: { $in: hashArray } }).lean();
-
-      // map areaId -> score
-      const map = new Map();
-      for (const c of cells) map.set(c.areaId, c.score);
-
-      // ensure missing cells are created lazily with default score 5
-      let total = 0, count = 0;
-      for (const h of hashArray) {
-        if (map.has(h)) {
-          total += map.get(h);
-          count++;
-        } else {
-          // create default doc (non-blocking)
-          // upsert with default score 5 and default factors (handled by model defaults)
-          await SafetyScore.updateOne({ areaId: h }, { $setOnInsert: { areaId: h } }, { upsert: true });
-          total += 5;
-          count++;
-        }
-      }
-      const avg = count ? +(total / count).toFixed(2) : "N/A";
-
-      results.push({
-        summary: route.summary || "",
-        polyline: encoded,
-        distance: route.legs[0].distance,
-        duration: route.legs[0].duration,
-        safety_score: avg,
-        color: colorFromScore(avg)
-      });
-    }
-
-    // sort results by safety_score desc, and include original order as fallback
-    results.sort((a, b) => {
-      if (a.safety_score === "N/A") return 1;
-      if (b.safety_score === "N/A") return -1;
-      return b.safety_score - a.safety_score;
-    });
-
-    res.json({ routes: results });
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/**
- * @swagger
- * /api/routes/compute:
- *   post:
- *     summary: Compute route(s), decode polyline(s), ensure SafetyScore cells exist for each geohash along the route
- *     tags: [Routes]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [origin,destination]
- *             properties:
- *               origin:
- *                 type: string
- *               destination:
- *                 type: string
- *               alternatives:
- *                 type: boolean
- *                 description: Whether to request alternative routes (default true)
- *     responses:
- *       '200':
- *         description: Routes processed and SafetyScore cells ensured
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 routes:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       summary: { type: string }
- *                       polyline: { type: string }
- *                       decoded_point_count: { type: number }
- *                       created_cells_count: { type: number }
- *       '400':
- *         description: Missing origin/destination
- *       '500':
- *         description: Server error
- */
-router.post('/compute', async (req, res) => {
-  try {
-    const { origin, destination } = req.body;
-    const alternatives = req.body.alternatives !== false; // default true
+  // accept origin/destination from body (preferred) or query
+  const reqBody = req.body || {};
+  const origin = reqBody.origin || req.query.origin;
+  const destination = reqBody.destination || req.query.destination;
     if (!origin || !destination) return res.status(400).json({ error: 'origin and destination required' });
 
     const apiUrl = `https://routes.googleapis.com/directions/v2:computeRoutes?key=${GOOGLE_KEY}`;
-
-    // build request body for Routes API
-    function parseLoc(s) {
-      if (!s) return null;
-      const parts = String(s).split(',').map(p => p.trim());
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        return { latLng: { latitude: Number(parts[0]), longitude: Number(parts[1]) } };
-      }
-      return { address: s };
-    }
-
-    const body = {
+    const apiBody = {
       origin: parseLoc(origin),
       destination: parseLoc(destination),
       travelMode: 'DRIVE',
       computeAlternativeRoutes: true
     };
+    const fieldMask = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline';
+  if (process.env.SHOW_PROVIDER_BODY) console.debug('Routes API request body:', JSON.stringify(apiBody));
+  const gres = await axios.post(apiUrl, apiBody, { headers: { 'Content-Type': 'application/json', 'X-Goog-FieldMask': fieldMask } });
+    if (!gres.data || !gres.data.routes || !gres.data.routes.length) {
+      if (process.env.SHOW_PROVIDER_BODY) console.warn('No routes found from provider:', JSON.stringify(gres.data));
+      return res.status(404).json({ error: 'No routes found', provider: process.env.SHOW_PROVIDER_BODY ? gres.data : undefined });
+    }
 
-  const fieldMask = 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline';
-  const gres = await axios.post(apiUrl, body, { headers: { 'Content-Type': 'application/json', 'X-Goog-FieldMask': fieldMask } });
-    if (!gres.data || !gres.data.routes || !gres.data.routes.length) return res.status(404).json({ error: 'No routes found' });
+    let results = await processProviderRoutes(gres.data.routes);
+    results = await scoreAndTagResults(results);
 
-    const results = [];
-    for (const route of gres.data.routes) {
-      // Routes API returns encoded polyline in different places depending on API version;
-      // try a few known fields defensively.
-      // Extract encoded polyline string from possible shapes returned by Routes API
-      let encoded = null;
-      try {
-        if (route.polyline) {
-          if (typeof route.polyline === 'string') encoded = route.polyline;
-          else if (typeof route.polyline.encodedPolyline === 'string') encoded = route.polyline.encodedPolyline;
-          else if (typeof route.polyline.encodedPolyline === 'object' && typeof route.polyline.encodedPolyline.polyline === 'string') encoded = route.polyline.encodedPolyline.polyline;
-          else if (typeof route.polyline.points === 'string') encoded = route.polyline.points;
-        }
-        if (!encoded) {
-          if (route.overview_polyline && typeof route.overview_polyline.points === 'string') encoded = route.overview_polyline.points;
-          else if (typeof route.encodedPolyline === 'string') encoded = route.encodedPolyline;
-        }
-      } catch (e) {
-        console.warn('Error extracting polyline', e.message);
-      }
-
-      if (!encoded) {
-        console.warn('No encoded polyline found on route, skipping');
-        continue;
-      }
-
-      let pts = [];
-      // debug: show a short snippet of the encoded polyline when diagnosing issues
-      try { console.log('Decoded polyline snippet:', String(encoded).slice(0,200)); } catch(e){}
-
-      // Try decoding with a few fallback cleaning steps to handle various formats/escaping
-      const tryDecode = (str) => {
-        try {
-          const p = polyline.decode(str);
-          if (Array.isArray(p) && p.length) return p;
-        } catch (e) {
-          // ignore
-        }
-        return null;
-      };
-
-      pts = tryDecode(encoded) || [];
-
-      if (!pts.length) {
-        // strip surrounding braces sometimes present
-        let cleaned = encoded;
-        if (cleaned.startsWith('{') && cleaned.endsWith('}')) cleaned = cleaned.slice(1, -1);
-        // unescape double backslashes
-        cleaned = cleaned.replace(/\\\\/g, '\\');
-        pts = tryDecode(cleaned) || [];
-        if (pts.length) encoded = cleaned;
-      }
-
-      if (!pts.length) {
-        // last resort: attempt JSON unescape of escape sequences
-        try {
-          const unescaped = JSON.parse('"' + String(encoded).replace(/"/g, '\\"') + '"');
-          pts = tryDecode(unescaped) || [];
-          if (pts.length) encoded = unescaped;
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      console.log('Decoded points count:', pts.length);
-
-      // compute all geohashes for route points
-      const hashes = new Set();
-      for (const [lat, lng] of pts) hashes.add(encode(lat, lng));
-      const hashArray = Array.from(hashes);
-
-      // find existing cells
-      const existing = await SafetyScore.find({ areaId: { $in: hashArray } }).lean();
-      const existingSet = new Set(existing.map(e => e.areaId));
-
-      // identify missing
-      const missing = hashArray.filter(h => !existingSet.has(h));
-
-      // upsert missing using bulkWrite for efficiency
-      if (missing.length) {
-        const ops = missing.map(h => ({ updateOne: { filter: { areaId: h }, update: { $setOnInsert: { areaId: h } }, upsert: true } }));
-        await SafetyScore.bulkWrite(ops);
-      }
-
-      results.push({
-        summary: route.summary || '',
-        polyline: encoded,
-        decoded_point_count: pts.length,
-        created_cells_count: missing.length,
-        created_cells: missing.slice(0, 50)
-      });
+  const single = String((reqBody.single !== undefined ? reqBody.single : req.query.single) || '').toLowerCase() === 'true';
+  const prefer = ((reqBody.prefer !== undefined ? reqBody.prefer : req.query.prefer) || '').toLowerCase();
+    if (single) {
+      // choose based on prefer
+      const safest = results.find(r => r.tags && r.tags.includes('safest'));
+      const fastest = results.find(r => r.tags && r.tags.includes('fastest'));
+      const shortest = results.find(r => r.tags && r.tags.includes('shortest'));
+      let chosen = safest || results[0] || null;
+      if (prefer === 'fastest' && fastest) chosen = fastest;
+      else if (prefer === 'shortest' && shortest) chosen = shortest;
+      else if (prefer === 'safest' && safest) chosen = safest;
+      return res.json({ route: chosen });
     }
 
     res.json({ routes: results });
