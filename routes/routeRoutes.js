@@ -25,11 +25,23 @@ function colorFromScore(score) {
 // Shared helpers
 function parseLoc(s) {
   if (!s) return null;
+  // If s is an object with lat/lng, use latLng
+  if (typeof s === 'object' && s !== null) {
+    if (typeof s.lat === 'number' && typeof s.lng === 'number') {
+      return { latLng: { latitude: s.lat, longitude: s.lng } };
+    }
+    // If s has a name property, use it as address string
+    if (typeof s.name === 'string') {
+      return { address: s.name };
+    }
+  }
+  // If s is a string that looks like lat,lng
   const parts = String(s).split(',').map(p => p.trim());
   if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
     return { latLng: { latitude: Number(parts[0]), longitude: Number(parts[1]) } };
   }
-  return { address: s };
+  // Otherwise, treat as address string
+  return { address: String(s) };
 }
 
 function extractEncodedPolyline(route) {
