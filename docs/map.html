@@ -11,6 +11,10 @@
   <div style="padding:8px; background:#fff; z-index:1000; position:absolute; left:8px; top:8px;">
     <div id="controls" style="width:320px; font-family: Arial, Helvetica, sans-serif; font-size:13px;">
       <div style="font-weight:600; margin-bottom:6px">SafeRoute Map</div>
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <button id="showAll" style="flex:1">Show All Cells</button>
+        <input id="allLimit" placeholder="limit" style="width:70px; padding:6px; box-sizing:border-box" value="500" />
+      </div>
       <label style="display:block; margin-bottom:4px">Single Geohash:</label>
       <input id="singleGeohash" placeholder="e.g. ts5em1y" style="width:100%; padding:6px; box-sizing:border-box; margin-bottom:8px" />
       <div style="display:flex; gap:8px; margin-bottom:10px">
@@ -64,12 +68,7 @@
       if(!geo || !geo.features) return alert('no data');
       const layer = L.geoJSON(geo, {
         style: f => ({ color: scoreColor(f.properties.score), weight:1, fillOpacity:0.5 }),
-        onEachFeature: (feature, layer) => {
-          const p = feature.properties || {};
-          const areaId = p.areaId || 'unknown';
-          const score = p.score == null ? 'N/A' : p.score;
-          layer.bindPopup(`<strong>${areaId}</strong><br/>Score: ${score}`);
-        }
+        onEachFeature: featurePopup
       });
       geoLayer.addLayer(layer);
       map.fitBounds(layer.getBounds());
@@ -106,7 +105,7 @@
       const res = await fetch('/api/safety/geojson?areaIds=' + encodeURIComponent(g));
       const geo = await res.json();
       if(!geo || !geo.features || !geo.features.length) return alert('no data for geohash');
-      const layer = L.geoJSON(geo, { style: f => ({ color: scoreColor(f.properties.score), weight:1, fillOpacity:0.6 }) });
+      const layer = L.geoJSON(geo, { style: f => ({ color: scoreColor(f.properties.score), weight:1, fillOpacity:0.6 }), onEachFeature: featurePopup });
       geoLayer.addLayer(layer);
       map.fitBounds(layer.getBounds());
     });
@@ -121,6 +120,87 @@
       const bounds = L.geoJSON(geo).getBounds();
       map.fitBounds(bounds.pad(0.75));
     });
+    // Show all cells button
+    document.getElementById('showAll').addEventListener('click', async ()=>{
+      geoLayer.clearLayers();
+      const limit = parseInt(document.getElementById('allLimit').value || '500', 10);
+      const res = await fetch('/api/safety/all-geojson?limit=' + encodeURIComponent(limit));
+      const geo = await res.json();
+      if(!geo || !geo.features) return alert('no data');
+      const layer = L.geoJSON(geo, { style: f => ({ color: scoreColor(f.properties.score), weight:1, fillOpacity:0.5 }), onEachFeature: featurePopup });
+      geoLayer.addLayer(layer);
+      try{ if(layer.getBounds && layer.getBounds().isValid && layer.getBounds().isValid()) map.fitBounds(layer.getBounds()); }catch(e){}
+    });
+
+    // Feature popup with editable form for factors and update button
+    function featurePopup(feature, layer){
+      const p = feature.properties || {};
+      const areaId = p.areaId || 'unknown';
+      const score = p.score == null ? 'N/A' : p.score;
+      const factors = p.factors || {};
+      const html = `
+        <div style="min-width:220px">
+          <strong>${areaId}</strong><br/>
+          Score: <span class="score">${score}</span>
+          <div style="margin-top:6px">
+            <label>lighting <input class="f-lighting" type="number" min="0" max="10" step="0.1" value="${factors.lighting ?? ''}" style="width:60px" /></label><br/>
+            <label>crowd <input class="f-crowd" type="number" min="0" max="10" step="0.1" value="${factors.crowd ?? ''}" style="width:60px" /></label><br/>
+            <label>police <input class="f-police" type="number" min="0" max="10" step="0.1" value="${factors.police ?? ''}" style="width:60px" /></label><br/>
+            <label>incidents <input class="f-incidents" type="number" min="0" max="10" step="0.1" value="${factors.incidents ?? ''}" style="width:60px" /></label><br/>
+            <label>accidents <input class="f-accidents" type="number" min="0" max="10" step="0.1" value="${factors.accidents ?? ''}" style="width:60px" /></label>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:8px">
+            <button class="updateBtn">Update</button>
+            <button class="refreshBtn">Refresh</button>
+          </div>
+          <div class="updateMsg" style="margin-top:6px; font-size:12px"></div>
+        </div>
+      `;
+      layer.bindPopup(html);
+      layer.on('popupopen', function(e){
+        const popupEl = e.popup.getElement();
+        if(!popupEl) return;
+        const updateBtn = popupEl.querySelector('.updateBtn');
+        const refreshBtn = popupEl.querySelector('.refreshBtn');
+        const msgEl = popupEl.querySelector('.updateMsg');
+        updateBtn.addEventListener('click', async ()=>{
+          const lighting = parseFloat(popupEl.querySelector('.f-lighting').value || '0');
+          const crowd = parseFloat(popupEl.querySelector('.f-crowd').value || '0');
+          const police = parseFloat(popupEl.querySelector('.f-police').value || '0');
+          const incidents = parseFloat(popupEl.querySelector('.f-incidents').value || '0');
+          const accidents = parseFloat(popupEl.querySelector('.f-accidents').value || '0');
+          const body = { areaId, factors: { lighting, crowd, police, incidents, accidents } };
+          try{
+            msgEl.textContent = 'Updating...';
+            const res = await fetch('/api/safety/update', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+            const data = await res.json();
+            if(!res.ok) throw new Error(data && data.error ? data.error : res.statusText);
+            popupEl.querySelector('.score').textContent = data.score ?? 'N/A';
+            msgEl.textContent = 'Updated';
+            if(layer.setStyle && typeof layer.setStyle === 'function'){
+              layer.setStyle({ color: scoreColor(data.score), fillOpacity: 0.6 });
+            }
+          }catch(err){ console.error(err); msgEl.textContent = 'Error: ' + (err.message || err); }
+        });
+        refreshBtn.addEventListener('click', async ()=>{
+          try{
+            msgEl.textContent = 'Refreshing...';
+            const res = await fetch('/api/safety/' + encodeURIComponent(areaId));
+            const data = await res.json();
+            if(!res.ok) throw new Error(data && data.error ? data.error : res.statusText);
+            popupEl.querySelector('.score').textContent = data.score ?? 'N/A';
+            const f = data.factors || {};
+            popupEl.querySelector('.f-lighting').value = f.lighting ?? '';
+            popupEl.querySelector('.f-crowd').value = f.crowd ?? '';
+            popupEl.querySelector('.f-police').value = f.police ?? '';
+            popupEl.querySelector('.f-incidents').value = f.incidents ?? '';
+            popupEl.querySelector('.f-accidents').value = f.accidents ?? '';
+            msgEl.textContent = 'Refreshed';
+          }catch(err){ console.error(err); msgEl.textContent = 'Error fetching'; }
+        });
+      });
+    }
+
     function scoreColor(s){ if(s==='N/A') return 'gray'; if(s>=7.5) return 'green'; if(s>=5) return 'yellow'; return 'red'; }
   </script>
 </body>

@@ -165,6 +165,35 @@ router.post("/update", async (req, res) => {
     }
   });
 
+// return GeoJSON FeatureCollection for a cursor (all or limited)
+router.get('/all-geojson', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || '1000', 10);
+    // fetch up to `limit` SafetyScore docs
+    const docs = await SafetyScore.find({}).limit(limit).lean();
+    const features = docs.map(d => {
+      const bbox = ngeohash.decode_bbox(d.areaId);
+      const [minLat, minLon, maxLat, maxLon] = bbox;
+      const coords = [
+        [minLon, minLat],
+        [maxLon, minLat],
+        [maxLon, maxLat],
+        [minLon, maxLat],
+        [minLon, minLat]
+      ];
+      return {
+        type: 'Feature',
+        properties: { areaId: d.areaId, score: d.score, factors: d.factors },
+        geometry: { type: 'Polygon', coordinates: [coords] }
+      };
+    });
+    res.json({ type: 'FeatureCollection', features });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Map geohashes to nearest police station, compute distance, score and update SafetyScore
 /**
  * @swagger
