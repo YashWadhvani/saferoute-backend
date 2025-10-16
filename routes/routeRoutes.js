@@ -290,7 +290,14 @@ async function scoreAndTagResults(results) {
 router.post('/compare', async (req, res) => {
   try {
   // accept origin/destination from body (preferred) or query
-  console.log('Received body:', req.body);
+  console.log('---- Incoming from client ----');
+  console.log('Headers:', req.headers);
+  console.log('Raw body (parsed):', JSON.stringify(req.body, null, 2));
+
+  // If you want raw bytes too (optional, requires raw-body middleware):
+  // const getRawBody = require('raw-body');
+  // getRawBody(req).then(buf => console.log('Raw bytes:', buf.toString())).catch(()=>{});
+
   const reqBody = req.body || {};
   const origin = reqBody.origin || req.query.origin;
   const destination = reqBody.destination || req.query.destination;
