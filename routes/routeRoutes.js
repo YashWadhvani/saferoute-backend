@@ -305,8 +305,8 @@ router.post('/compare', async (req, res) => {
 
     const apiUrl = `https://routes.googleapis.com/directions/v2:computeRoutes?key=${GOOGLE_KEY}`;
     const apiBody = {
-      origin: parseLoc(origin),
-      destination: parseLoc(destination),
+      origin: {location: parseLoc(origin)},
+      destination: {location: parseLoc(destination)},
       travelMode: 'DRIVE',
       computeAlternativeRoutes: true
     };
