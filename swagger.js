@@ -10,7 +10,11 @@ function setupSwagger(app) {
         version: '1.0.0',
         description: 'API documentation for SafeRoute backend'
       },
-      servers: [ { url: 'http://localhost:5000', description: 'Local server' } ],
+      // Servers: prefer explicit HOSTED_URL, then Render's RENDER_EXTERNAL_URL, otherwise localhost
+      servers: [
+        { url: process.env.HOSTED_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000', description: 'Primary server (HOSTED_URL or Render fallback)' },
+        { url: 'http://localhost:5000', description: 'Local server' }
+      ],
       components: {
         securitySchemes: {
           bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }
