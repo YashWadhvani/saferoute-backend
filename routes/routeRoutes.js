@@ -290,6 +290,7 @@ async function scoreAndTagResults(results) {
 router.post('/compare', async (req, res) => {
   try {
   // accept origin/destination from body (preferred) or query
+  console.log('Received body:', req.body);
   const reqBody = req.body || {};
   const origin = reqBody.origin || req.query.origin;
   const destination = reqBody.destination || req.query.destination;
