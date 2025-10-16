@@ -28,7 +28,7 @@ function parseLoc(s) {
   // If s is an object with lat/lng, use latLng
   if (typeof s === 'object' && s !== null) {
     if (typeof s.lat === 'number' && typeof s.lng === 'number') {
-      return { latLng: { latitude: s.lat, longitude: s.lng } };
+      return { location: { latLng: { latitude: s.lat, longitude: s.lng } } };
     }
     // If s has a name property, use it as address string
     if (typeof s.name === 'string') {
@@ -38,7 +38,7 @@ function parseLoc(s) {
   // If s is a string that looks like lat,lng
   const parts = String(s).split(',').map(p => p.trim());
   if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-    return { latLng: { latitude: Number(parts[0]), longitude: Number(parts[1]) } };
+    return { location: { latLng: { latitude: Number(parts[0]), longitude: Number(parts[1]) } } };
   }
   // Otherwise, treat as address string
   return { address: String(s) };
@@ -305,8 +305,8 @@ router.post('/compare', async (req, res) => {
 
     const apiUrl = `https://routes.googleapis.com/directions/v2:computeRoutes?key=${GOOGLE_KEY}`;
     const apiBody = {
-      origin: {location: parseLoc(origin)},
-      destination: {location: parseLoc(destination)},
+      origin: parseLoc(origin),
+      destination: parseLoc(destination),
       travelMode: 'DRIVE',
       computeAlternativeRoutes: true
     };
