@@ -3,6 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const morgan = require('morgan');
+const http = require('http');
 
 const authRoutes = require("./routes/authRoutes");
 const safetyRoutes = require("./routes/safetyRoutes");
@@ -11,6 +12,8 @@ const userRoutes = require("./routes/userRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const sosRoutes = require("./routes/sosRoutes");
 const policeStationRoutes = require("./routes/policeStationRoutes");
+
+const MY_URL = process.env.RENDER_EXTERNAL_URL || 'https://saferoute-backend-nw9n.onrender.com/';
 
 const app = express();
 app.use(cors());
@@ -34,6 +37,14 @@ app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/sos', sosRoutes);
 app.use('/api/police', policeStationRoutes);
+
+setInterval(() => {
+  http.get(MY_URL, (res) => {
+    console.log(`[KeepAlive] Pinged ${MY_URL} at ${new Date().toLocaleString()}`);
+  }).on('error', (e) => {
+    console.error(`[KeepAlive Error] ${e.message}`);
+  });
+}, 60000);
 
 app.get("/", (req,res)=> res.send("SafeRoute Backend OK"));
 const PORT = process.env.PORT || 5000;
