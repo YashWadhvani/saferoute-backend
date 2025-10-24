@@ -3,7 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const morgan = require('morgan');
-const http = require('http');
+const https = require('https');
 
 const authRoutes = require("./routes/authRoutes");
 const safetyRoutes = require("./routes/safetyRoutes");
@@ -39,7 +39,7 @@ app.use('/api/sos', sosRoutes);
 app.use('/api/police', policeStationRoutes);
 
 setInterval(() => {
-  http.get(MY_URL, (res) => {
+  https.get(MY_URL, (res) => {
     console.log(`[KeepAlive] Pinged ${MY_URL} at ${new Date().toLocaleString()}`);
   }).on('error', (e) => {
     console.error(`[KeepAlive Error] ${e.message}`);
