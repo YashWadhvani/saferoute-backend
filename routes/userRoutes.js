@@ -148,4 +148,97 @@ router.get('/me/contacts', auth, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/users/me/contacts/{contactId}:
+ *   delete:
+ *     summary: Remove an emergency contact by its id
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contactId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The _id of the emergency contact subdocument to remove
+ *     responses:
+ *       '200':
+ *         description: Updated contacts array
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name: { type: string }
+ *                   phone: { type: string }
+ *       '400':
+ *         description: Bad request
+ *       '401':
+ *         description: Unauthorized
+ */
+router.delete('/me/contacts/:contactId', auth, async (req, res) => {
+  try {
+    const { contactId } = req.params;
+    if (!contactId) return res.status(400).json({ error: 'contactId required' });
+    // remove by subdocument _id
+    const before = Array.isArray(req.user.emergencyContacts) ? req.user.emergencyContacts.length : 0;
+    req.user.emergencyContacts = (req.user.emergencyContacts || []).filter(c => String(c._id || c.id || c.phone) !== String(contactId));
+    if (typeof req.user.markModified === 'function') req.user.markModified('emergencyContacts');
+    await req.user.save();
+    const fresh = await User.findById(req.user._id).lean();
+    return res.json(fresh?.emergencyContacts || []);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/me/contacts:
+ *   delete:
+ *     summary: Remove an emergency contact by phone (query) or body
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: phone
+ *         schema:
+ *           type: string
+ *         description: Phone number of contact to remove (optional; can be provided in body)
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       '200':
+ *         description: Updated contacts array
+ *       '400':
+ *         description: phone required
+ */
+router.delete('/me/contacts', auth, async (req, res) => {
+  try {
+    const phone = req.query.phone || (req.body && req.body.phone);
+    if (!phone) return res.status(400).json({ error: 'phone required' });
+    const norm = String(phone).trim();
+    req.user.emergencyContacts = (req.user.emergencyContacts || []).filter(c => String(c.phone).trim() !== norm);
+    if (typeof req.user.markModified === 'function') req.user.markModified('emergencyContacts');
+    await req.user.save();
+    const fresh = await User.findById(req.user._id).lean();
+    return res.json(fresh?.emergencyContacts || []);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
