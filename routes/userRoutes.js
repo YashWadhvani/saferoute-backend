@@ -98,9 +98,50 @@ router.post('/me/contacts', auth, async (req, res) => {
   try {
     const { name, phone } = req.body;
     if (!phone) return res.status(400).json({ error: 'phone required' });
-    req.user.emergencyContacts.push({ name, phone });
+    // normalize
+    const contact = { name: name ? String(name).trim() : '', phone: String(phone).trim() };
+    req.user.emergencyContacts.push(contact);
+    // ensure Mongoose notices the array change in all cases
+    if (typeof req.user.markModified === 'function') req.user.markModified('emergencyContacts');
     await req.user.save();
-    res.json(req.user.emergencyContacts);
+    // re-fetch fresh user from DB to avoid any cached/attached doc surprises
+    const fresh = await User.findById(req.user._id).lean();
+    if (!fresh) return res.status(500).json({ error: 'Failed to reload user' });
+    res.json(fresh.emergencyContacts || []);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get emergency contacts for current user
+/**
+ * @swagger
+ * /api/users/me/contacts:
+ *   get:
+ *     summary: Get emergency contacts for current user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: Array of emergency contacts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   name: { type: string }
+ *                   phone: { type: string }
+ *       '401':
+ *         description: Unauthorized
+ */
+router.get('/me/contacts', auth, async (req, res) => {
+  try {
+    const contacts = Array.isArray(req.user?.emergencyContacts) ? req.user.emergencyContacts : [];
+    res.json(contacts);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

@@ -135,6 +135,28 @@ router.post("/update", async (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
   // return GeoJSON FeatureCollection for a list of areaIds
+  /**
+   * @swagger
+   * /api/safety/geojson:
+   *   get:
+   *     summary: Return GeoJSON FeatureCollection for list of areaIds
+   *     tags: [Safety]
+   *     parameters:
+   *       - in: query
+   *         name: areaIds
+   *         schema:
+   *           type: string
+   *         description: Comma-separated list of geohash areaIds
+   *     responses:
+   *       '200':
+   *         description: GeoJSON FeatureCollection
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/GeoJSONFeatureCollection'
+   *       '400':
+   *         description: Missing areaIds
+   */
   router.get("/geojson", async (req, res) => {
     try {
       const { areaIds } = req.query; // comma separated
@@ -166,6 +188,26 @@ router.post("/update", async (req, res) => {
   });
 
 // return GeoJSON FeatureCollection for a cursor (all or limited)
+/**
+ * @swagger
+ * /api/safety/all-geojson:
+ *   get:
+ *     summary: Return GeoJSON FeatureCollection for all safety cells (limited)
+ *     tags: [Safety]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Max number of cells to return (default 1000)
+ *     responses:
+ *       '200':
+ *         description: GeoJSON FeatureCollection
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/GeoJSONFeatureCollection'
+ */
 router.get('/all-geojson', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || '1000', 10);
