@@ -12,6 +12,7 @@ const userRoutes = require("./routes/userRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const sosRoutes = require("./routes/sosRoutes");
 const policeStationRoutes = require("./routes/policeStationRoutes");
+const potholeRoutes = require("./routes/potholeRoutes");
 
 const MY_URL =
     process.env.RENDER_EXTERNAL_URL ||
@@ -45,6 +46,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/sos", sosRoutes);
 app.use("/api/police", policeStationRoutes);
+app.use("/api/potholes", potholeRoutes)
 
 setInterval(() => {
     https

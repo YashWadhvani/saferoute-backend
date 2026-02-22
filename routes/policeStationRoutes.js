@@ -56,10 +56,10 @@ router.get("/fetch-police-stations", async (req, res) => {
     // Use Places API v1: places:searchText (POST). Handle pagination via nextPageToken if present.
     // The Places v1 text search expects a textQuery object: { textQuery: { query: '...' }, pageSize }
     do {
-  const url = `https://places.googleapis.com/v1/places:searchText?key=${API_KEY}`;
-  // Places v1 accepts textQuery as a string in some examples. Send as string to match samples.
-  const body = { textQuery: `police stations in ${city}`, pageSize: 50 };
-  if (nextPageToken) body.pageToken = nextPageToken;
+      const url = `https://places.googleapis.com/v1/places:searchText?key=${API_KEY}`;
+      // Places v1 accepts textQuery as a string in some examples. Send as string to match samples.
+      const body = { textQuery: `police stations in ${city}`, pageSize: 50 };
+      if (nextPageToken) body.pageToken = nextPageToken;
 
       console.log(`Fetching page ${page} for city ${city} (Places v1)...`);
       console.log('Request body:', JSON.stringify(body));
@@ -134,7 +134,7 @@ router.get("/fetch-police-stations", async (req, res) => {
         const geohash = ngeohash.encode(lat, lng, 7);
 
         await PoliceStation.updateOne(
-          { placeId: placeId || `${geohash}-${Math.random().toString(36).slice(2,9)}` },
+          { placeId: placeId || `${geohash}-${Math.random().toString(36).slice(2, 9)}` },
           {
             placeId: placeId,
             name,
@@ -230,10 +230,10 @@ router.get('/', async (req, res) => {
     const bbox = req.query.bbox; // minLat,minLng,maxLat,maxLng
     const q = {};
     if (bbox) {
-      const parts = String(bbox).split(',').map(s=>parseFloat(s.trim()));
+      const parts = String(bbox).split(',').map(s => parseFloat(s.trim()));
       if (parts.length === 4) {
         const [minLat, minLng, maxLat, maxLng] = parts;
-        q['location.geo'] = { $geoWithin: { $geometry: { type: 'Polygon', coordinates: [[ [minLng,minLat], [maxLng,minLat], [maxLng,maxLat], [minLng,maxLat], [minLng,minLat] ]] } } };
+        q['location.geo'] = { $geoWithin: { $geometry: { type: 'Polygon', coordinates: [[[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]] } } };
       }
     }
     const docs = await PoliceStation.find(q).limit(limit).lean();
