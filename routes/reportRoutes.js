@@ -114,6 +114,25 @@ router.get('/', async (req, res) => {
 
 /**
  * @swagger
+ * /api/reports/user:
+ *   get:
+ *     summary: Get reports created by authenticated user
+ *     tags: [Report]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/user', auth, async (req, res) => {
+  try {
+    const docs = await Report.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(200);
+    res.json(docs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * @swagger
  * /api/reports/{id}:
  *   get:
  *     summary: Get a report by id
