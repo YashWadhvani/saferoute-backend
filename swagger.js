@@ -21,69 +21,69 @@ function setupSwagger(app) {
         },
         schemas: {
           User: {
-              type: 'object',
-              required: ['_id','createdAt'],
-              properties: {
-                _id: { type: 'string', description: 'MongoDB ObjectId' },
-                name: { type: 'string' },
-                email: { type: 'string', nullable: true, format: 'email' },
-                phone: { type: 'string', nullable: true },
-                authProvider: { type: 'string', example: 'otp' },
-                emergencyContacts: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: { name: { type: 'string' }, phone: { type: 'string' } }
-                  }
-                },
-                createdAt: { type: 'string', format: 'date-time' }
+            type: 'object',
+            required: ['_id', 'createdAt'],
+            properties: {
+              _id: { type: 'string', description: 'MongoDB ObjectId' },
+              name: { type: 'string' },
+              email: { type: 'string', nullable: true, format: 'email' },
+              phone: { type: 'string', nullable: true },
+              authProvider: { type: 'string', example: 'otp' },
+              emergencyContacts: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { name: { type: 'string' }, phone: { type: 'string' } }
+                }
               },
-              example: {
-                _id: '64f1b2c3d4e5f6a7b8c9d012',
-                name: 'Jane Doe',
-                email: 'jane@example.com',
-                phone: '+15551234567',
-                authProvider: 'otp',
-                emergencyContacts: [{ name: 'John Doe', phone: '+15557654321' }],
-                createdAt: '2025-10-09T12:34:56.000Z'
-              }
+              createdAt: { type: 'string', format: 'date-time' }
             },
+            example: {
+              _id: '64f1b2c3d4e5f6a7b8c9d012',
+              name: 'Jane Doe',
+              email: 'jane@example.com',
+              phone: '+15551234567',
+              authProvider: 'otp',
+              emergencyContacts: [{ name: 'John Doe', phone: '+15557654321' }],
+              createdAt: '2025-10-09T12:34:56.000Z'
+            }
+          },
           SafetyScore: {
-              type: 'object',
-              required: ['areaId','score'],
-              properties: {
-                _id: { type: 'string' },
-                areaId: { type: 'string', description: 'Geohash area id' },
-                score: { type: 'number', minimum: 0, maximum: 10 },
-                factors: {
-                  type: 'object',
-                  properties: {
-                    lighting: { type: 'number', minimum: 0, maximum: 10 },
-                    crowd: { type: 'number', minimum: 0, maximum: 10 },
-                    police: { type: 'number', minimum: 0, maximum: 10 },
-                    incidents: { type: 'number', minimum: 0, maximum: 10 },
-                    accidents: { type: 'number', minimum: 0, maximum: 10 }
-                  }
-                },
-                nearestPolice: {
-                  type: 'object',
-                  description: 'Minimal reference to nearest police POI; use /api/police/{placeId} to fetch details',
-                  properties: {
-                    placeId: { type: 'string' },
-                    distance_m: { type: 'number' }
-                  }
-                },
-                lastUpdated: { type: 'string', format: 'date-time' }
+            type: 'object',
+            required: ['areaId', 'score'],
+            properties: {
+              _id: { type: 'string' },
+              areaId: { type: 'string', description: 'Geohash area id' },
+              score: { type: 'number', minimum: 0, maximum: 10 },
+              factors: {
+                type: 'object',
+                properties: {
+                  lighting: { type: 'number', minimum: 0, maximum: 10 },
+                  crowd: { type: 'number', minimum: 0, maximum: 10 },
+                  police: { type: 'number', minimum: 0, maximum: 10 },
+                  incidents: { type: 'number', minimum: 0, maximum: 10 },
+                  accidents: { type: 'number', minimum: 0, maximum: 10 }
+                }
               },
-              example: {
-                _id: '64f1b2c3d4e5f6a7b8c9d999',
-                areaId: 'dr5regw',
-                score: 6.5,
-                factors: { lighting: 7, crowd: 6, police: 5, incidents: 4, accidents: 3 },
-                nearestPolice: { placeId: 'ChI...', distance_m: 320 },
-                lastUpdated: '2025-10-09T12:00:00.000Z'
-              }
+              nearestPolice: {
+                type: 'object',
+                description: 'Minimal reference to nearest police POI; use /api/police/{placeId} to fetch details',
+                properties: {
+                  placeId: { type: 'string' },
+                  distance_m: { type: 'number' }
+                }
+              },
+              lastUpdated: { type: 'string', format: 'date-time' }
             },
+            example: {
+              _id: '64f1b2c3d4e5f6a7b8c9d999',
+              areaId: 'dr5regw',
+              score: 6.5,
+              factors: { lighting: 7, crowd: 6, police: 5, incidents: 4, accidents: 3 },
+              nearestPolice: { placeId: 'ChI...', distance_m: 320 },
+              lastUpdated: '2025-10-09T12:00:00.000Z'
+            }
+          },
           PoliceStation: {
             type: 'object',
             properties: {
@@ -142,46 +142,106 @@ function setupSwagger(app) {
             }
           },
           Route: {
-              type: 'object',
-              required: ['polyline','safety_score'],
-              properties: {
-                summary: { type: 'string' },
-                polyline: { type: 'string' },
-                distance: { type: 'object', description: 'Google distance object { text, value }' },
-                duration: { type: 'object', description: 'Google duration object { text, value }' },
-                decoded_point_count: { type: 'integer' },
-                areaIds: { type: 'array', items: { type: 'string' }, description: 'Geohash area ids sampled along the route' },
-                created_cells_count: { type: 'integer', description: 'Number of SafetyScore cells created during this request' },
-                created_cells: { type: 'array', items: { type: 'string' }, description: 'List of created areaIds (first 50)' },
-                safety_score: { type: ['number', 'string'], description: 'Average safety score or "N/A"' },
-                color: { type: 'string' },
-                tags: { type: 'array', items: { type: 'string' }, description: "Route tags such as 'safest','fastest','shortest'" }
+            type: 'object',
+            required: ['polyline', 'safety_score'],
+            properties: {
+              summary: { type: 'string' },
+              polyline: { type: 'string' },
+              distance: { type: 'object', description: 'Google distance object { text, value }' },
+              duration: { type: 'object', description: 'Google duration object { text, value }' },
+              decoded_point_count: { type: 'integer' },
+              areaIds: { type: 'array', items: { type: 'string' }, description: 'Geohash area ids sampled along the route' },
+              created_cells_count: { type: 'integer', description: 'Number of SafetyScore cells created during this request' },
+              created_cells: { type: 'array', items: { type: 'string' }, description: 'List of created areaIds (first 50)' },
+              safety_score: { type: 'number', description: 'Final safety score including pothole penalty' },
+              safety_score_excluding_potholes: { type: 'number', description: 'Base safety score before pothole penalty' },
+              safety_score_including_potholes: { type: 'number', description: 'Safety score after pothole penalty' },
+              pothole_count: { type: 'integer', description: 'Total potholes detected along route' },
+              pothole_intensity: { type: 'number', description: 'Pothole intensity across route = pothole_count / route_distance_km' },
+              pothole_penalty: { type: 'number', description: 'Penalty deducted from base score due to potholes' },
+              comparative_analysis: {
+                type: 'object',
+                properties: {
+                  score_excluding_potholes: { type: 'number' },
+                  score_including_potholes: { type: 'number' },
+                  pothole_intensity: { type: 'number' },
+                  pothole_penalty: { type: 'number' },
+                  score_drop_percent: { type: 'number', description: 'Percent drop from base score because of potholes' }
+                }
               },
-              example: {
-                summary: 'I-90 W',
-                polyline: 'abcd1234encoded',
-                distance: { text: '5.4 km', value: 5400 },
-                duration: { text: '12 mins', value: 720 },
-                decoded_point_count: 120,
-                areaIds: ['dr5regw','dr5regx'],
-                created_cells_count: 0,
-                created_cells: [],
-                safety_score: 7.2,
-                color: 'green',
-                tags: ['safest']
-              }
+              additional_comparisons: {
+                type: 'object',
+                description: 'Present on safest route',
+                properties: {
+                  safer_than_fastest_percent: { type: 'number' },
+                  safer_than_shortest_percent: { type: 'number' }
+                }
+              },
+              color: { type: 'string' },
+              tags: { type: 'array', items: { type: 'string' }, description: "Route tags such as 'safest','fastest','shortest'" }
             },
+            example: {
+              summary: 'I-90 W',
+              polyline: 'abcd1234encoded',
+              distance: { text: '5.4 km', value: 5400 },
+              duration: { text: '12 mins', value: 720 },
+              decoded_point_count: 120,
+              areaIds: ['dr5regw', 'dr5regx'],
+              created_cells_count: 0,
+              created_cells: [],
+              safety_score: 6.85,
+              safety_score_excluding_potholes: 7.2,
+              safety_score_including_potholes: 6.85,
+              pothole_count: 2,
+              pothole_intensity: 0.37,
+              pothole_penalty: 0.35,
+              comparative_analysis: {
+                score_excluding_potholes: 7.2,
+                score_including_potholes: 6.85,
+                pothole_intensity: 0.37,
+                pothole_penalty: 0.35,
+                score_drop_percent: 4.86
+              },
+              additional_comparisons: {
+                safer_than_fastest_percent: 11.2,
+                safer_than_shortest_percent: 8.4
+              },
+              color: 'green',
+              tags: ['safest']
+            }
+          },
+          RecentRoute: {
+            type: 'object',
+            properties: {
+              origin: { type: 'string' },
+              destination: { type: 'string' },
+              distance: { type: 'string' },
+              duration: { type: 'string' },
+              safety: { type: 'number' },
+              tags: { type: 'array', items: { type: 'string' } },
+              createdAt: { type: 'string', format: 'date-time' }
+            },
+            example: {
+              origin: '23.022500,72.571400',
+              destination: '23.038120,72.556830',
+              distance: '5.4 km',
+              duration: '12 mins',
+              safety: 6.85,
+              tags: ['safest'],
+              createdAt: '2026-02-27T10:30:00.000Z'
+            }
+          },
           Report: {
             type: 'object',
-            required: ['type','location'],
+            required: ['type', 'location'],
             properties: {
               _id: { type: 'string' },
               user: { type: 'string' },
-              type: { type: 'string', enum: ['harassment','theft','accident','dark_area','suspicious_activity'] },
+              type: { type: 'string', enum: ['harassment', 'theft', 'accident', 'dark_area', 'suspicious_activity'] },
               description: { type: 'string' },
               location: {
                 type: 'object',
-                required: ['lat','lng'],
+                required: ['lat', 'lng'],
                 properties: { lat: { type: 'number' }, lng: { type: 'number' } }
               },
               severity: { type: 'number', minimum: 1, maximum: 5 },
@@ -199,13 +259,13 @@ function setupSwagger(app) {
           },
           SOSLog: {
             type: 'object',
-            required: ['user','status','createdAt'],
+            required: ['user', 'status', 'createdAt'],
             properties: {
               _id: { type: 'string' },
               user: { type: 'string' },
               location: { type: 'object', properties: { lat: { type: 'number' }, lng: { type: 'number' } } },
               contactsNotified: { type: 'array', items: { type: 'string' } },
-              status: { type: 'string', enum: ['triggered','sent','resolved'] },
+              status: { type: 'string', enum: ['triggered', 'sent', 'resolved'] },
               createdAt: { type: 'string', format: 'date-time' }
             },
             example: {
@@ -218,18 +278,18 @@ function setupSwagger(app) {
             }
           },
           Error: { type: 'object', properties: { error: { type: 'string' } } }
-        ,
-        AuthResponse: {
-          type: 'object',
-          properties: {
-            token: { type: 'string' },
-            user: { $ref: '#/components/schemas/User' }
-          },
-          example: {
-            token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-            user: { _id: '64f1b2c3d4e5f6a7b8c9d012', name: 'Jane Doe', email: 'jane@example.com' }
+          ,
+          AuthResponse: {
+            type: 'object',
+            properties: {
+              token: { type: 'string' },
+              user: { $ref: '#/components/schemas/User' }
+            },
+            example: {
+              token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+              user: { _id: '64f1b2c3d4e5f6a7b8c9d012', name: 'Jane Doe', email: 'jane@example.com' }
+            }
           }
-        }
         }
       }
     },
@@ -246,10 +306,34 @@ function setupSwagger(app) {
               'application/json': {
                 schema: {
                   type: 'object',
-                  required: ['origin','destination'],
+                  required: ['origin', 'destination'],
                   properties: {
-                    origin: { type: 'string', description: 'Origin address or lat,lng' },
-                    destination: { type: 'string', description: 'Destination address or lat,lng' },
+                    origin: {
+                      oneOf: [
+                        { type: 'string', description: 'Origin address or lat,lng' },
+                        {
+                          type: 'object',
+                          properties: {
+                            lat: { type: 'number' },
+                            lng: { type: 'number' },
+                            name: { type: 'string', description: 'Optional human-readable label' }
+                          }
+                        }
+                      ]
+                    },
+                    destination: {
+                      oneOf: [
+                        { type: 'string', description: 'Destination address or lat,lng' },
+                        {
+                          type: 'object',
+                          properties: {
+                            lat: { type: 'number' },
+                            lng: { type: 'number' },
+                            name: { type: 'string', description: 'Optional human-readable label' }
+                          }
+                        }
+                      ]
+                    },
                     single: { type: 'boolean', description: 'Return a single preferred route' },
                     prefer: { type: 'string', description: "Preferred selector: 'safest'|'fastest'|'shortest'" }
                   }
@@ -289,6 +373,39 @@ function setupSwagger(app) {
             '200': { description: 'Success', content: { 'application/json': { schema: { type: 'object', properties: { routes: { type: 'array', items: { $ref: '#/components/schemas/Route' } }, route: { $ref: '#/components/schemas/Route' } } } } } },
             '400': { description: 'Missing origin/destination', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
             '404': { description: 'No routes found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }
+          }
+        }
+      },
+      '/api/routes/recent': {
+        get: {
+          summary: 'Get recent route searches for current user',
+          tags: ['Routes'],
+          security: [{ bearerAuth: [] }],
+          responses: {
+            '200': {
+              description: 'Recent route searches for authenticated user',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      recentRoutes: {
+                        type: 'array',
+                        items: { $ref: '#/components/schemas/RecentRoute' }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            '401': {
+              description: 'Missing/invalid token',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } }
+            },
+            '500': {
+              description: 'Server error',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } }
+            }
           }
         }
       }
