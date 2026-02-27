@@ -136,6 +136,78 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function metersToLatDegrees(meters) {
+  return meters / 111320;
+}
+
+function metersToLngDegrees(meters, atLat) {
+  const denom = 111320 * Math.cos((atLat * Math.PI) / 180);
+  if (!denom || !Number.isFinite(denom)) return 0;
+  return meters / Math.max(Math.abs(denom), 1e-6);
+}
+
+// Approximate point-to-segment distance in meters using local equirectangular projection.
+function pointToSegmentDistanceMeters(point, a, b) {
+  const latRef = point.lat;
+  const cosLat = Math.cos((latRef * Math.PI) / 180);
+  const kx = 111320 * Math.max(Math.abs(cosLat), 1e-6); // meters per lon degree
+  const ky = 111320; // meters per lat degree
+
+  const px = point.lng * kx;
+  const py = point.lat * ky;
+  const ax = a.lng * kx;
+  const ay = a.lat * ky;
+  const bx = b.lng * kx;
+  const by = b.lat * ky;
+
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const ab2 = abx * abx + aby * aby;
+  if (ab2 <= 1e-6) {
+    const dx = px - ax;
+    const dy = py - ay;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  let t = (apx * abx + apy * aby) / ab2;
+  if (t < 0) t = 0;
+  if (t > 1) t = 1;
+
+  const cx = ax + t * abx;
+  const cy = ay + t * aby;
+  const dx = px - cx;
+  const dy = py - cy;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function isPotholeNearRoute(routePoints, potholePoint, maxDistanceMeters) {
+  if (!Array.isArray(routePoints) || routePoints.length === 0) return false;
+  if (routePoints.length === 1) {
+    return (
+      haversineMeters(
+        routePoints[0].lat,
+        routePoints[0].lng,
+        potholePoint.lat,
+        potholePoint.lng
+      ) <= maxDistanceMeters
+    );
+  }
+
+  // segment-based check is robust even when polyline points are sparse.
+  for (let i = 0; i < routePoints.length - 1; i++) {
+    const d = pointToSegmentDistanceMeters(
+      potholePoint,
+      routePoints[i],
+      routePoints[i + 1]
+    );
+    if (d <= maxDistanceMeters) return true;
+  }
+
+  return false;
+}
+
 function parseDistanceKm(distanceObj) {
   const meters = distanceObj && typeof distanceObj.value === 'number' ? distanceObj.value : 0;
   return meters > 0 ? meters / 1000 : 0;
@@ -244,6 +316,9 @@ async function processProviderRoutes(routes, opts = {}) {
 
 // Score and tag results: compute safety_score, color and tags for an array of result objects
 async function scoreAndTagResults(results) {
+  const includePotholeDebug =
+    String(process.env.ROUTE_POTHOLE_DEBUG || '').toLowerCase() === 'true';
+
   // compute union of all areaIds and fetch their scores
   const allHashes = new Set();
   for (const r of results) {
@@ -279,6 +354,13 @@ async function scoreAndTagResults(results) {
         pothole_penalty: 0,
         score_drop_percent: 0
       };
+      if (includePotholeDebug) {
+        r.pothole_debug = {
+          candidate_potholes_scanned: 0,
+          matched_potholes: 0,
+          match_radius_meters: Number(process.env.ROUTE_POTHOLE_MATCH_METERS || 60)
+        };
+      }
       r.color = colorFromScore(0);
       continue;
     }
@@ -297,10 +379,21 @@ async function scoreAndTagResults(results) {
     if (routePoints.length && routeDistanceKm > 0) {
       const lats = routePoints.map(p => p.lat);
       const lngs = routePoints.map(p => p.lng);
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLng = Math.min(...lngs);
-      const maxLng = Math.max(...lngs);
+      const minLatRaw = Math.min(...lats);
+      const maxLatRaw = Math.max(...lats);
+      const minLngRaw = Math.min(...lngs);
+      const maxLngRaw = Math.max(...lngs);
+
+      // Expand bbox so potholes slightly off-road are still candidates.
+      const candidateBufferMeters = Number(process.env.ROUTE_POTHOLE_CANDIDATE_BUFFER_METERS || 120);
+      const avgLat = (minLatRaw + maxLatRaw) / 2;
+      const latPad = metersToLatDegrees(candidateBufferMeters);
+      const lngPad = metersToLngDegrees(candidateBufferMeters, avgLat);
+
+      const minLat = minLatRaw - latPad;
+      const maxLat = maxLatRaw + latPad;
+      const minLng = minLngRaw - lngPad;
+      const maxLng = maxLngRaw + lngPad;
 
       const candidates = await Pothole.find({
         location: {
@@ -313,23 +406,36 @@ async function scoreAndTagResults(results) {
         }
       }).lean();
 
-      const maxRouteDistanceMeters = 20;
+      const candidateScanned = Array.isArray(candidates) ? candidates.length : 0;
+
+      // Increase tolerance and use segment distance to include potholes slightly off-road.
+      const maxRouteDistanceMeters = Number(process.env.ROUTE_POTHOLE_MATCH_METERS || 60);
       for (const candidate of candidates) {
         const coords = candidate?.location?.coordinates;
         if (!Array.isArray(coords) || coords.length < 2) continue;
         const [candLng, candLat] = coords;
 
-        let touchesRoute = false;
-        for (const p of routePoints) {
-          const d = haversineMeters(p.lat, p.lng, candLat, candLng);
-          if (d <= maxRouteDistanceMeters) {
-            touchesRoute = true;
-            break;
-          }
-        }
-
+        const touchesRoute = isPotholeNearRoute(
+          routePoints,
+          { lat: candLat, lng: candLng },
+          maxRouteDistanceMeters
+        );
         if (touchesRoute) potholeCount += 1;
       }
+
+      if (includePotholeDebug) {
+        r.pothole_debug = {
+          candidate_potholes_scanned: candidateScanned,
+          matched_potholes: potholeCount,
+          match_radius_meters: maxRouteDistanceMeters
+        };
+      }
+    } else if (includePotholeDebug) {
+      r.pothole_debug = {
+        candidate_potholes_scanned: 0,
+        matched_potholes: 0,
+        match_radius_meters: Number(process.env.ROUTE_POTHOLE_MATCH_METERS || 60)
+      };
     }
 
     const potholeIntensity = routeDistanceKm > 0 ? toRounded(potholeCount / routeDistanceKm, 2) : 0;
