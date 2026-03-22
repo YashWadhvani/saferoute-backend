@@ -270,6 +270,30 @@ router.get('/', auth, async (req, res) => {
 });
 
 /**
+ * Public list endpoint to return potholes (optional bbox, limit)
+ * Used by docs/map.html to plot potholes on the map
+ */
+router.get('/list', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit || '500', 10);
+        const bbox = req.query.bbox; // minLat,minLng,maxLat,maxLng
+        const q = {};
+        if (bbox) {
+            const parts = String(bbox).split(',').map(s => parseFloat(s.trim()));
+            if (parts.length === 4) {
+                const [minLat, minLng, maxLat, maxLng] = parts;
+                q['location'] = { $geoWithin: { $geometry: { type: 'Polygon', coordinates: [[[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]] } } };
+            }
+        }
+        const docs = await Pothole.find(q).limit(limit).lean();
+        res.json(docs);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
  * @swagger
  * /api/potholes/route-score:
  *   post:

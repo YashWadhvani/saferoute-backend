@@ -115,6 +115,31 @@
                     "
                 >
                     <button
+                        id="showPotholes"
+                        style="flex: 1; background: #fb8c00; color: #000"
+                    >
+                        Show Potholes
+                    </button>
+                    <input
+                        id="potholeLimit"
+                        placeholder="limit"
+                        style="
+                            width: 70px;
+                            padding: 6px;
+                            box-sizing: border-box;
+                        "
+                        value="1000"
+                    />
+                </div>
+                <div
+                    style="
+                        display: flex;
+                        gap: 8px;
+                        align-items: center;
+                        margin-top: 8px;
+                    "
+                >
+                    <button
                         id="showHospitals"
                         style="flex: 1; background: #e53935; color: #fff"
                     >
@@ -176,6 +201,7 @@
             let geoLayer = L.layerGroup().addTo(map);
             let policeLayer = L.layerGroup().addTo(map);
             let hospitalLayer = L.layerGroup().addTo(map);
+            let potholeLayer = L.layerGroup().addTo(map);
 
             document
                 .getElementById("show")
@@ -205,8 +231,46 @@
                 geoLayer.clearLayers();
                 policeLayer.clearLayers();
                 hospitalLayer.clearLayers();
+                potholeLayer.clearLayers();
                 map.setView([0, 0], 2);
             });
+            // Show potholes
+            document
+                .getElementById("showPotholes")
+                .addEventListener("click", async () => {
+                    potholeLayer.clearLayers();
+                    const limit = parseInt(
+                        document.getElementById("potholeLimit").value || "1000",
+                        10,
+                    );
+                    const res = await fetch(
+                        "/api/potholes/list?limit=" + encodeURIComponent(limit),
+                    );
+                    const list = await res.json();
+                    if (!Array.isArray(list))
+                        return alert("unexpected response");
+                    for (const s of list) {
+                        try {
+                            const coords = s.location && s.location.coordinates;
+                            if (!coords || coords.length < 2) continue;
+                            const lng = coords[0],
+                                lat = coords[1];
+                            const marker = L.circleMarker([lat, lng], {
+                                radius: 5,
+                                color: "#fb8c00",
+                                fillColor: "#fb8c00",
+                                fillOpacity: 0.9,
+                            });
+                            const html = `<strong>Pothole</strong><br/>Intensity: ${s.intensity ?? "N/A"}<br/>Reports: ${s.reports ?? "N/A"}<br/>id: ${s._id || ""}`;
+                            marker.bindPopup(html);
+                            potholeLayer.addLayer(marker);
+                        } catch (e) {
+                            console.warn("marker error", e);
+                        }
+                    }
+                    if (potholeLayer.getLayers().length)
+                        map.fitBounds(potholeLayer.getBounds());
+                });
             document
                 .getElementById("showHospitals")
                 .addEventListener("click", async () => {
