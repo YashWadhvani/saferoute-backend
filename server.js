@@ -12,6 +12,7 @@ const userRoutes = require("./routes/userRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const sosRoutes = require("./routes/sosRoutes");
 const policeStationRoutes = require("./routes/policeStationRoutes");
+const hospitalRoutes = require("./routes/hospitalRoutes");
 const potholeRoutes = require("./routes/potholeRoutes");
 
 const MY_URL =
@@ -46,6 +47,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/sos", sosRoutes);
 app.use("/api/police", policeStationRoutes);
+app.use("/api/hospital", hospitalRoutes);
 app.use("/api/potholes", potholeRoutes)
 
 setInterval(() => {
