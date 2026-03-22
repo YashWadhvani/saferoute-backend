@@ -374,10 +374,12 @@
                 const score = p.score == null ? "N/A" : p.score;
                 const factors = p.factors || {};
                 const html = `
-        <div style="min-width:220px">
-          <strong>${areaId}</strong><br/>
-          Score: <span class="score">${score}</span>
-                        <div style="margin-top:6px">
+                <div style="min-width:220px">
+                    <strong>${areaId}</strong><br/>
+                      Score: <span class="score">${score}</span><br/>
+                      Hospital factor: <span class="hospitalVal">${factors.hospital ?? "N/A"}</span><br/>
+                      Nearest hospital: <span class="nearestHospital">${p.nearestHospital && p.nearestHospital.distance_m ? p.nearestHospital.distance_m : "N/A"}</span>
+                      <div style="margin-top:6px">
                         <label>lighting <input class="f-lighting" type="number" min="0" max="10" step="0.1" value="${factors.lighting ?? ""}" style="width:60px" /></label><br/>
                         <label>crowd <input class="f-crowd" type="number" min="0" max="10" step="0.1" value="${factors.crowd ?? ""}" style="width:60px" /></label><br/>
                         <label>police <input class="f-police" type="number" min="0" max="10" step="0.1" value="${factors.police ?? ""}" style="width:60px" /></label><br/>
@@ -385,7 +387,7 @@
                         <label>incidents <input class="f-incidents" type="number" min="0" max="10" step="0.1" value="${factors.incidents ?? ""}" style="width:60px" /></label><br/>
                         <label>accidents <input class="f-accidents" type="number" min="0" max="10" step="0.1" value="${factors.accidents ?? ""}" style="width:60px" /></label>
                     </div>
-          <div style="margin-top:8px; display:flex; gap:8px">
+                    <div style="margin-top:8px; display:flex; gap:8px">
             <button class="updateBtn">Update</button>
             <button class="refreshBtn">Refresh</button>
           </div>
@@ -445,6 +447,22 @@
                                 );
                             popupEl.querySelector(".score").textContent =
                                 data.score ?? "N/A";
+                            popupEl.querySelector(".hospitalVal").textContent =
+                                data.factors && data.factors.hospital != null
+                                    ? data.factors.hospital
+                                    : "N/A";
+                            if (
+                                data.nearestHospital &&
+                                data.nearestHospital.distance_m != null
+                            ) {
+                                const d = data.nearestHospital.distance_m;
+                                popupEl.querySelector(
+                                    ".nearestHospital",
+                                ).textContent =
+                                    d >= 1000
+                                        ? (d / 1000).toFixed(2) + " km"
+                                        : Math.round(d) + " m";
+                            }
                             msgEl.textContent = "Updated";
                             if (
                                 layer.setStyle &&
@@ -489,6 +507,24 @@
                                 f.incidents ?? "";
                             popupEl.querySelector(".f-accidents").value =
                                 f.accidents ?? "";
+                            popupEl.querySelector(".hospitalVal").textContent =
+                                f.hospital ?? "N/A";
+                            if (
+                                data.nearestHospital &&
+                                data.nearestHospital.distance_m != null
+                            ) {
+                                const d = data.nearestHospital.distance_m;
+                                popupEl.querySelector(
+                                    ".nearestHospital",
+                                ).textContent =
+                                    d >= 1000
+                                        ? (d / 1000).toFixed(2) + " km"
+                                        : Math.round(d) + " m";
+                            } else {
+                                popupEl.querySelector(
+                                    ".nearestHospital",
+                                ).textContent = "N/A";
+                            }
                             msgEl.textContent = "Refreshed";
                         } catch (err) {
                             console.error(err);
