@@ -7,40 +7,6 @@ const router = express.Router();
 
 // Utility function to delay pagination requests
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-/**
- * @swagger
- * /api/hospital/{placeId}:
- *   get:
- *     summary: Get hospital details by placeId
- *     tags: [Hospital]
- *     parameters:
- *       - in: path
- *         name: placeId
- *         required: true
- *         schema:
- *           type: string
- *         description: Google Place ID or internal place identifier
- *     responses:
- *       '200':
- *         description: Hospital document
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Hospital'
- *       '404':
- *         description: Not found
- */
-router.get('/:placeId', async (req, res) => {
-    try {
-        const { placeId } = req.params;
-        const doc = await Hospital.findOne({ placeId });
-        if (!doc) return res.status(404).json({ error: 'Not found' });
-        res.json(doc);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
 
 /**
  * @swagger
@@ -219,6 +185,41 @@ router.get("/fetch-hospitals", async (req, res) => {
     } catch (err) {
         console.error("Error fetching hospitals:", err.message);
         res.status(500).json({ error: "Internal Server Error", details: err.message });
+    }
+});
+
+/**
+ * @swagger
+ * /api/hospital/{placeId}:
+ *   get:
+ *     summary: Get hospital details by placeId
+ *     tags: [Hospital]
+ *     parameters:
+ *       - in: path
+ *         name: placeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Google Place ID or internal place identifier
+ *     responses:
+ *       '200':
+ *         description: Hospital document
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Hospital'
+ *       '404':
+ *         description: Not found
+ */
+router.get('/:placeId', async (req, res) => {
+    try {
+        const { placeId } = req.params;
+        const doc = await Hospital.findOne({ placeId });
+        if (!doc) return res.status(404).json({ error: 'Not found' });
+        res.json(doc);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
