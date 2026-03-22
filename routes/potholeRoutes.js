@@ -69,6 +69,8 @@ const router = express.Router();
  */
 router.post('/', auth, async (req, res) => {
     try {
+        console.log('POST /api/potholes body:', JSON.stringify(req.body));
+        console.log('Request user:', req.user ? req.user._id : 'no-user');
         const { latitude, longitude, intensity } = req.body;
 
         // Validation
@@ -159,8 +161,10 @@ router.post('/', auth, async (req, res) => {
             });
         }
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Error in POST /api/potholes:', err);
+        // if validation errors from mongoose, include message
+        const msg = err && err.message ? err.message : 'Server error';
+        res.status(500).json({ error: msg });
     }
 });
 
