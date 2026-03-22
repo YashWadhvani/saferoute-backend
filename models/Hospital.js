@@ -37,4 +37,7 @@ hospitalSchema.set('toJSON', {
     }
 });
 
+// 2dsphere index for geo queries (match PoliceStation)
+hospitalSchema.index({ 'location.geo': '2dsphere' });
+
 module.exports = mongoose.model("Hospital", hospitalSchema);
