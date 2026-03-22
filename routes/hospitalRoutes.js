@@ -1,3 +1,12 @@
+const express = require("express");
+const axios = require("axios");
+const ngeohash = require("ngeohash");
+const Hospital = require("../models/Hospital");
+
+const router = express.Router();
+
+// Utility function to delay pagination requests
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 /**
  * @swagger
  * /api/hospital/{placeId}:
@@ -79,47 +88,6 @@ router.get('/', async (req, res) => {
         res.status(500).json({ error: 'Server error' });
     }
 });
-const express = require("express");
-const axios = require("axios");
-const ngeohash = require("ngeohash");
-const Hospital = require("../models/Hospital");
-
-const router = express.Router();
-
-// Utility function to delay pagination requests
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * @swagger
- * /api/hospital/fetch-hospitals:
- *   get:
- *     summary: Fetch hospitals for a city from Google Places and save them
- *     tags:
- *       - Hospital
- *     parameters:
- *       - in: query
- *         name: city
- *         schema:
- *           type: string
- *         description: City name to search hospitals in (e.g. "Ahmedabad"). If omitted, a default city will be used.
- *     responses:
- *       '200':
- *         description: Fetched and saved hospitals count
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                 count:
- *                   type: integer
- *             example:
- *               message: "Successfully fetched and saved 24 hospitals."
- *               count: 24
- *       '400':
- *         description: Bad request
- */
 
 /**
  * @swagger
