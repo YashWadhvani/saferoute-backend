@@ -378,12 +378,14 @@
                     <strong>${areaId}</strong><br/>
                       Score: <span class="score">${score}</span><br/>
                       Hospital factor: <span class="hospitalVal">${factors.hospital ?? "N/A"}</span><br/>
+                      Potholes factor: <span class="potholesVal">${factors.potholes ?? "N/A"}</span><br/>
                       Nearest hospital: <span class="nearestHospital">${p.nearestHospital && p.nearestHospital.distance_m ? p.nearestHospital.distance_m : "N/A"}</span>
                       <div style="margin-top:6px">
                         <label>lighting <input class="f-lighting" type="number" min="0" max="10" step="0.1" value="${factors.lighting ?? ""}" style="width:60px" /></label><br/>
                         <label>crowd <input class="f-crowd" type="number" min="0" max="10" step="0.1" value="${factors.crowd ?? ""}" style="width:60px" /></label><br/>
                         <label>police <input class="f-police" type="number" min="0" max="10" step="0.1" value="${factors.police ?? ""}" style="width:60px" /></label><br/>
-                        <label>hospital <input class="f-hospital" type="number" min="0" max="10" step="0.1" value="${factors.hospital ?? ""}" style="width:60px" /></label><br/>
+                            <label>hospital <input class="f-hospital" type="number" min="0" max="10" step="0.1" value="${factors.hospital ?? ""}" style="width:60px" /></label><br/>
+                            <label>potholes <input class="f-potholes" type="number" min="0" max="10" step="0.1" value="${factors.potholes ?? ""}" style="width:60px" /></label><br/>
                         <label>incidents <input class="f-incidents" type="number" min="0" max="10" step="0.1" value="${factors.incidents ?? ""}" style="width:60px" /></label><br/>
                         <label>accidents <input class="f-accidents" type="number" min="0" max="10" step="0.1" value="${factors.accidents ?? ""}" style="width:60px" /></label>
                     </div>
@@ -414,6 +416,9 @@
                         const hospital = parseFloat(
                             popupEl.querySelector(".f-hospital").value || "0",
                         );
+                        const potholes = parseFloat(
+                            popupEl.querySelector(".f-potholes").value || "0",
+                        );
                         const incidents = parseFloat(
                             popupEl.querySelector(".f-incidents").value || "0",
                         );
@@ -427,6 +432,7 @@
                                 crowd,
                                 police,
                                 hospital,
+                                potholes,
                                 incidents,
                                 accidents,
                             },
@@ -451,6 +457,15 @@
                                 data.factors && data.factors.hospital != null
                                     ? data.factors.hospital
                                     : "N/A";
+                            if (popupEl.querySelector(".potholesVal")) {
+                                popupEl.querySelector(
+                                    ".potholesVal",
+                                ).textContent =
+                                    data.factors &&
+                                    data.factors.potholes != null
+                                        ? data.factors.potholes
+                                        : "N/A";
+                            }
                             if (
                                 data.nearestHospital &&
                                 data.nearestHospital.distance_m != null
@@ -503,12 +518,20 @@
                                 f.police ?? "";
                             popupEl.querySelector(".f-hospital").value =
                                 f.hospital ?? "";
+                            popupEl.querySelector(".f-potholes").value =
+                                f.potholes ?? "";
                             popupEl.querySelector(".f-incidents").value =
                                 f.incidents ?? "";
                             popupEl.querySelector(".f-accidents").value =
                                 f.accidents ?? "";
                             popupEl.querySelector(".hospitalVal").textContent =
                                 f.hospital ?? "N/A";
+                            // show potholes factor
+                            if (popupEl.querySelector(".potholesVal")) {
+                                popupEl.querySelector(
+                                    ".potholesVal",
+                                ).textContent = f.potholes ?? "N/A";
+                            }
                             if (
                                 data.nearestHospital &&
                                 data.nearestHospital.distance_m != null

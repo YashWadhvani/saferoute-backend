@@ -46,6 +46,10 @@ const Hospital = require('../models/Hospital');
  *                     type: number
  *                   police:
  *                     type: number
+ *                   hospital:
+ *                     type: number
+ *                   potholes:
+ *                     type: number
  *                   incidents:
  *                     type: number
  *                   accidents:

@@ -1,5 +1,9 @@
 const express = require('express');
 const Pothole = require('../models/Pothole');
+const SafetyScore = require('../models/SafetyScore');
+const calculateSafetyScore = require('../utils/calculateSafetyScore');
+const { encode } = require('../utils/geohashUtils');
+const ngeohash = require('ngeohash');
 const auth = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -110,6 +114,15 @@ router.post('/', auth, async (req, res) => {
             pothole.intensity = Math.max(pothole.intensity, intensity);
             await pothole.save();
 
+            // update safety cell for potholes factor
+            try {
+                const lat = pothole.location.coordinates[1];
+                const lng = pothole.location.coordinates[0];
+                await updateSafetyCellPotholes(lat, lng);
+            } catch (e) {
+                console.warn('Failed to update safety cell for pothole (update):', e && e.message);
+            }
+
             return res.status(200).json({
                 success: true,
                 message: 'Pothole report added to existing location',
@@ -128,6 +141,15 @@ router.post('/', auth, async (req, res) => {
             });
 
             await pothole.save();
+
+            // update safety cell for potholes factor
+            try {
+                const lat = pothole.location.coordinates[1];
+                const lng = pothole.location.coordinates[0];
+                await updateSafetyCellPotholes(lat, lng);
+            } catch (e) {
+                console.warn('Failed to update safety cell for pothole (create):', e && e.message);
+            }
 
             return res.status(201).json({
                 success: true,
@@ -530,3 +552,43 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 module.exports = router;
+
+// helper: compute potholes factor for the geohash cell containing lat/lng and update SafetyScore
+async function updateSafetyCellPotholes(lat, lng) {
+    if (lat == null || lng == null) return;
+    const areaId = encode(lat, lng);
+    // compute bbox for geohash cell
+    const bbox = ngeohash.decode_bbox(areaId); // [minLat, minLon, maxLat, maxLon]
+    const [minLat, minLon, maxLat, maxLon] = bbox;
+    // find potholes within bbox
+    const potholes = await Pothole.find({
+        location: {
+            $geoWithin: {
+                $box: [[minLon, minLat], [maxLon, maxLat]]
+            }
+        }
+    }).lean();
+
+    if (!potholes || potholes.length === 0) {
+        // If no potholes in cell, set factor to neutral/high (10)
+        const safeFactor = 10;
+        const doc = await SafetyScore.findOne({ areaId });
+        const newFactors = Object.assign({}, (doc && doc.factors) || {}, { potholes: safeFactor });
+        const newScore = calculateSafetyScore(newFactors);
+        await SafetyScore.findOneAndUpdate({ areaId }, { areaId, factors: newFactors, score: newScore, lastUpdated: new Date() }, { upsert: true });
+        return;
+    }
+
+    // compute average intensity (higher intensity == worse)
+    let sum = 0;
+    for (const p of potholes) sum += (p.intensity || 0);
+    const avgIntensity = sum / potholes.length;
+    // convert avgIntensity (0..10, higher worse) to safe factor (0..10, higher safer)
+    const safeFactor = Math.max(0, Math.min(10, 10 - avgIntensity));
+
+    // update SafetyScore for areaId
+    const doc = await SafetyScore.findOne({ areaId });
+    const newFactors = Object.assign({}, (doc && doc.factors) || {}, { potholes: safeFactor });
+    const newScore = calculateSafetyScore(newFactors);
+    await SafetyScore.findOneAndUpdate({ areaId }, { areaId, factors: newFactors, score: newScore, lastUpdated: new Date() }, { upsert: true });
+}

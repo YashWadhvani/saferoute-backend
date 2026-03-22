@@ -4,6 +4,7 @@ const weights = {
   crowd: 0.15,
   police: 0.20,
   hospital: 0.20, // new hospital parameter
+  potholes: 0.10,
   incidents: 0.15,
   accidents: 0.10
 };
@@ -19,7 +20,8 @@ function calculateSafetyScore(factors) {
       val = 10 - val; // invert so 10 incidents -> treated as 0 (unsafe), 0 incidents -> 10 (safe)
     }
     // For hospital, higher value means closer (safer), lower value means farther (less safe)
-    // If you want to use distance in km, you should convert it to a 0-10 scale before passing as 'hospital'
+    // For potholes, the factor should be 0..10 where higher == safer (few/no potholes).
+    // If your pothole data produces an intensity (higher == worse), convert it to a 0-10 safe score before storing in factors.potholes.
     total += val * weights[k];
     wsum += weights[k];
   }

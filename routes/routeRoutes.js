@@ -4,6 +4,7 @@ const polyline = require("@mapbox/polyline");
 const jwt = require('jsonwebtoken');
 const { encode } = require("../utils/geohashUtils");
 const SafetyScore = require("../models/SafetyScore");
+const calculateSafetyScore = require("../utils/calculateSafetyScore");
 const Pothole = require('../models/Pothole');
 const User = require('../models/User');
 const auth = require('../middleware/authMiddleware');
@@ -334,7 +335,22 @@ async function scoreAndTagResults(results) {
     for (const m of missing) createdMap.set(m, true);
     // re-query so newly created docs are returned
     const cells = await SafetyScore.find({ areaId: { $in: hashArray } }).lean();
-    for (const c of cells) scoreMap.set(c.areaId, (typeof c.score === 'number') ? c.score : 5);
+    for (const c of cells) {
+      // store actual score (includes potholes) and also compute a score without potholes by setting potholes factor to neutral (10)
+      const actualScore = (typeof c.score === 'number') ? c.score : 5;
+      scoreMap.set(c.areaId, actualScore);
+      // compute score excluding potholes
+      try {
+        const factors = Object.assign({}, c.factors || {});
+        // if potholes factor missing, treat as neutral/high (10)
+        factors.potholes = 10;
+        const exclScore = calculateSafetyScore(factors);
+        // store in separate map keyed by areaId with prefix
+        scoreMap.set(c.areaId + "::excl", exclScore);
+      } catch (e) {
+        scoreMap.set(c.areaId + "::excl", (typeof c.score === 'number') ? c.score : 5);
+      }
+    }
   }
 
   // compute per-route safety_score
@@ -364,12 +380,16 @@ async function scoreAndTagResults(results) {
       r.color = colorFromScore(0);
       continue;
     }
-    let total = 0, count = 0;
+    let totalIncl = 0, totalExcl = 0, count = 0;
     for (const id of ids) {
-      const s = scoreMap.has(id) ? scoreMap.get(id) : 5; // default 5
-      total += s; count++;
+      const incl = scoreMap.has(id) ? scoreMap.get(id) : 5; // default 5
+      const excl = scoreMap.has(id + "::excl") ? scoreMap.get(id + "::excl") : incl;
+      totalIncl += incl;
+      totalExcl += excl;
+      count++;
     }
-    const baseSafety = count ? +(total / count).toFixed(2) : 0;
+    const baseSafetyExcluding = count ? +(totalExcl / count).toFixed(2) : 0;
+    const baseSafetyIncluding = count ? +(totalIncl / count).toFixed(2) : 0;
 
     // pothole intensity = potholes along route / route distance (km)
     const routePoints = Array.isArray(r.decoded_points) ? r.decoded_points : [];
@@ -439,21 +459,22 @@ async function scoreAndTagResults(results) {
     }
 
     const potholeIntensity = routeDistanceKm > 0 ? toRounded(potholeCount / routeDistanceKm, 2) : 0;
-    const potholePenalty = Math.min(4, toRounded(potholeIntensity * 0.35, 2));
-    const inclusiveSafety = toRounded(Math.max(0, baseSafety - potholePenalty), 2);
-    const scoreDropPercent = baseSafety > 0
-      ? toRounded(((baseSafety - inclusiveSafety) / baseSafety) * 100, 2)
+    // Instead of a separate penalty, derive the pothole impact from difference between excluding and including cell-based scores
+    const potholePenalty = toRounded(Math.max(0, baseSafetyExcluding - baseSafetyIncluding), 2);
+    const inclusiveSafety = baseSafetyIncluding;
+    const scoreDropPercent = baseSafetyExcluding > 0
+      ? toRounded(((baseSafetyExcluding - inclusiveSafety) / baseSafetyExcluding) * 100, 2)
       : 0;
 
-    r.safety_score_excluding_potholes = baseSafety;
-    r.safety_score_including_potholes = inclusiveSafety;
+    r.safety_score_excluding_potholes = baseSafetyExcluding;
+    r.safety_score_including_potholes = baseSafetyIncluding;
     r.safety_score = inclusiveSafety;
     r.pothole_count = potholeCount;
     r.pothole_intensity = potholeIntensity;
     r.pothole_penalty = potholePenalty;
     r.comparative_analysis = {
-      score_excluding_potholes: baseSafety,
-      score_including_potholes: inclusiveSafety,
+      score_excluding_potholes: baseSafetyExcluding,
+      score_including_potholes: baseSafetyIncluding,
       pothole_intensity: potholeIntensity,
       pothole_penalty: potholePenalty,
       score_drop_percent: scoreDropPercent
