@@ -61,6 +61,7 @@ function setupSwagger(app) {
                   lighting: { type: 'number', minimum: 0, maximum: 10 },
                   crowd: { type: 'number', minimum: 0, maximum: 10 },
                   police: { type: 'number', minimum: 0, maximum: 10 },
+                  hospital: { type: 'number', minimum: 0, maximum: 10 },
                   incidents: { type: 'number', minimum: 0, maximum: 10 },
                   accidents: { type: 'number', minimum: 0, maximum: 10 }
                 }
@@ -73,15 +74,50 @@ function setupSwagger(app) {
                   distance_m: { type: 'number' }
                 }
               },
+              nearestHospital: {
+                type: 'object',
+                description: 'Minimal reference to nearest hospital POI; use /api/hospital/{placeId} to fetch details',
+                properties: {
+                  placeId: { type: 'string' },
+                  distance_m: { type: 'number' }
+                }
+              },
               lastUpdated: { type: 'string', format: 'date-time' }
             },
             example: {
               _id: '64f1b2c3d4e5f6a7b8c9d999',
               areaId: 'dr5regw',
               score: 6.5,
-              factors: { lighting: 7, crowd: 6, police: 5, incidents: 4, accidents: 3 },
+              factors: { lighting: 7, crowd: 6, police: 5, hospital: 8, incidents: 4, accidents: 3 },
               nearestPolice: { placeId: 'ChI...', distance_m: 320 },
+              nearestHospital: { placeId: 'ChH...', distance_m: 500 },
               lastUpdated: '2025-10-09T12:00:00.000Z'
+            }
+          },
+          Hospital: {
+            type: 'object',
+            properties: {
+              _id: { type: 'string' },
+              placeId: { type: 'string' },
+              name: { type: 'string' },
+              address: { type: 'string' },
+              phone: { type: 'string' },
+              location: {
+                type: 'object',
+                properties: {
+                  geohash: { type: 'string' },
+                  geo: { type: 'object', properties: { type: { type: 'string' }, coordinates: { type: 'array', items: { type: 'number' } } } }
+                }
+              },
+              lastUpdated: { type: 'string', format: 'date-time' }
+            },
+            example: {
+              placeId: 'ChH...',
+              name: 'City Hospital',
+              address: 'Main road, Ahmedabad',
+              phone: '+91 79 1234 5678',
+              location: { geohash: 'ts5em1z', geo: { type: 'Point', coordinates: [72.5978149, 23.0262505] } },
+              lastUpdated: '2025-10-12T10:00:00.000Z'
             }
           },
           PoliceStation: {

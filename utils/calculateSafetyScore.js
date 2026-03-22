@@ -1,9 +1,10 @@
 // weights can be tuned later
 const weights = {
-  lighting: 0.25,
-  crowd: 0.20,
-  police: 0.25,
-  incidents: 0.20,
+  lighting: 0.20,
+  crowd: 0.15,
+  police: 0.20,
+  hospital: 0.20, // new hospital parameter
+  incidents: 0.15,
   accidents: 0.10
 };
 
@@ -17,6 +18,8 @@ function calculateSafetyScore(factors) {
     if (k === 'incidents' || k === 'accidents') {
       val = 10 - val; // invert so 10 incidents -> treated as 0 (unsafe), 0 incidents -> 10 (safe)
     }
+    // For hospital, higher value means closer (safer), lower value means farther (less safe)
+    // If you want to use distance in km, you should convert it to a 0-10 scale before passing as 'hospital'
     total += val * weights[k];
     wsum += weights[k];
   }
