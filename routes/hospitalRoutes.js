@@ -123,6 +123,7 @@ router.get('/', async (req, res) => {
  *         description: Server error (missing API key or external API failure)
  */
 router.get("/fetch-hospitals", async (req, res) => {
+    console.log("inside Fetch")
     try {
         const API_KEY = process.env.GOOGLE_MAPS_KEY;
         if (!API_KEY) return res.status(500).json({ error: "Missing Google API Key" });
