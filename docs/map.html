@@ -131,6 +131,25 @@
                         value="1000"
                     />
                 </div>
+                <div
+                    style="
+                        margin-top: 8px;
+                        display: flex;
+                        gap: 8px;
+                        align-items: center;
+                    "
+                >
+                    <button
+                        id="nearestHospitalBtn"
+                        style="flex: 1; background: #c62828; color: #fff"
+                    >
+                        Nearest Hospital (center)
+                    </button>
+                    <div
+                        id="hospital-info"
+                        style="font-size: 13px; padding: 4px; min-width: 160px"
+                    ></div>
+                </div>
             </div>
         </div>
         <div id="map"></div>
@@ -284,6 +303,69 @@
                     }
                     if (policeLayer.getLayers().length)
                         map.fitBounds(policeLayer.getBounds());
+                });
+
+            // Nearest hospital (from map center)
+            document
+                .getElementById("nearestHospitalBtn")
+                .addEventListener("click", async () => {
+                    const center = map.getCenter();
+                    const lat = center.lat;
+                    const lng = center.lng;
+                    const infoEl = document.getElementById("hospital-info");
+                    infoEl.textContent = "Loading...";
+                    try {
+                        const res = await fetch(
+                            `/api/safety/map/nearest-hospital?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
+                        );
+                        if (!res.ok) {
+                            const err = await res
+                                .json()
+                                .catch(() => ({ error: res.statusText }));
+                            infoEl.textContent =
+                                "Error: " +
+                                (err && err.error ? err.error : res.statusText);
+                            return;
+                        }
+                        const data = await res.json();
+                        if (!data || !data.hospital) {
+                            infoEl.textContent = "No hospital found";
+                            return;
+                        }
+                        const h = data.hospital;
+                        infoEl.innerHTML = `<strong>${h.name || "Hospital"}</strong><br/>Distance: ${data.distanceMeters} m<br/>Hospital score: ${data.hospitalScore}`;
+                        // add marker
+                        hospitalLayer.clearLayers();
+                        try {
+                            const coords =
+                                h.location &&
+                                h.location.geo &&
+                                h.location.geo.coordinates;
+                            if (coords && coords.length >= 2) {
+                                const marker = L.circleMarker(
+                                    [coords[1], coords[0]],
+                                    {
+                                        radius: 8,
+                                        color: "#b71c1c",
+                                        fillColor: "#b71c1c",
+                                        fillOpacity: 0.95,
+                                    },
+                                );
+                                marker.bindPopup(
+                                    `<strong>${h.name || "Hospital"}</strong><br/>Score: ${data.hospitalScore}`,
+                                );
+                                hospitalLayer.addLayer(marker);
+                                map.fitBounds(
+                                    hospitalLayer.getBounds().pad(0.5),
+                                );
+                            }
+                        } catch (e) {
+                            console.warn("marker add error", e);
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        infoEl.textContent = "Error fetching";
+                    }
                 });
 
             // Single geohash button - reuse geojson endpoint for one geohash
