@@ -1,0 +1,8 @@
+,Mean,Regression,PCA,RandomForest
+Lighting_Importance,0.14,0.1599999999999999,0.17,0.11
+Police_Importance,0.11,0.14,0.2,0.18
+Hospital_Importance,0.15,0.14,0.13,0.14
+Crowd_Importance,0.15,0.14,-0.06,0.08
+Crime_Importance,0.1799999999999999,0.14,0.28,0.19
+Accident_Importance,0.12,0.14,0.11,0.15
+Road_Importance,0.15,0.14,0.17,0.15
