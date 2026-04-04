@@ -3,6 +3,7 @@ const axios = require('axios');
 let cachedWeights = null;
 let lastFetchTime = null;
 const CACHE_DURATION = 5 * 60 * 1000; // Cache duration: 5 minutes
+const BACKEND_URL = process.env.HOSTED_URL || 'http://localhost:3000'; // Default to localhost if BACKEND_URL is not set
 
 async function fetchWeights() {
   const now = Date.now();
@@ -11,7 +12,7 @@ async function fetchWeights() {
   }
 
   try {
-    const response = await axios.get('/api/weights'); // Fetch weights from API
+    const response = await axios.get(`${BACKEND_URL}/api/weights`); // Fetch weights from API
     cachedWeights = response.data; // Cache the weights
     lastFetchTime = now; // Update the last fetch time
     return cachedWeights;

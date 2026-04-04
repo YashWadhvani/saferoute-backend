@@ -5,6 +5,12 @@ import os
 # Define the absolute path to the data directory
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 
+def normalize_weights(weights):
+    """Normalize weights to ensure they sum to 1."""
+    if weights.sum() != 1.0:
+        weights = weights / weights.sum()
+    return weights.round(2)
+
 def get_weights(method):
     file_map = {
         "mean": os.path.join(data_dir, "weights_mean.csv"),
@@ -17,7 +23,8 @@ def get_weights(method):
         weights = {}
         for method_name, file_path in file_map.items():
             try:
-                weights[method_name] = pd.read_csv(file_path, index_col=0).squeeze("columns")
+                raw_weights = pd.read_csv(file_path, index_col=0).squeeze("columns")
+                weights[method_name] = normalize_weights(raw_weights)
             except FileNotFoundError:
                 weights[method_name] = f"File not found: {file_path}"
         return weights
@@ -25,7 +32,8 @@ def get_weights(method):
     if method in file_map:
         weights_path = file_map[method]
         try:
-            return pd.read_csv(weights_path, index_col=0).squeeze("columns")
+            raw_weights = pd.read_csv(weights_path, index_col=0).squeeze("columns")
+            return normalize_weights(raw_weights)
         except FileNotFoundError:
             raise FileNotFoundError(f"Weights file not found for method: {method}")
 
@@ -49,4 +57,4 @@ if __name__ == "__main__":
             print(f"Weights using {method} method:")
             print(weights)
     except Exception as e:
-        print(str(e))
+        print(f"Error: {e}")
