@@ -25,7 +25,7 @@ def haversine_meters(lat1, lon1, lat2, lon2):
 
 def load_verified_potholes(repo_root: Path):
     # Try MongoDB first, fallback to local JSON file
-    uri = "mongodb://YashWadhvani:INCORRECt75@ac-az9rl9l-shard-00-00.uynjiyk.mongodb.net:27017,ac-az9rl9l-shard-00-01.uynjiyk.mongodb.net:27017,ac-az9rl9l-shard-00-02.uynjiyk.mongodb.net:27017/?ssl=true&replicaSet=atlas-oczjzg-shard-0&authSource=admin&appName=Cluster0"
+    uri = os.getenv("MONGO_URI", "")
     potholes = []
     if uri and MongoClient is not None:
         try:
@@ -48,7 +48,7 @@ def load_verified_potholes(repo_root: Path):
         try:
             with open(local_json, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            # Expect either a list of docs or {"docs": [...]}
+            # Expect either a list of docs or {"docs": [...]} 
             if isinstance(data, dict) and "docs" in data:
                 docs = data["docs"]
             elif isinstance(data, list):
