@@ -325,6 +325,87 @@ function setupSwagger(app) {
               token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
               user: { _id: '64f1b2c3d4e5f6a7b8c9d012', name: 'Jane Doe', email: 'jane@example.com' }
             }
+          },
+          PredictSeverityRequest: {
+            type: 'object',
+            properties: {
+              acceleration: { type: 'array', items: { type: 'number' }, description: 'Acceleration data points' },
+              gyroscope: { type: 'array', items: { type: 'number' }, description: 'Gyroscope data points' },
+              speed: { type: 'number', description: 'Speed of the vehicle' }
+            },
+            required: ['acceleration', 'gyroscope', 'speed'],
+            example: {
+              acceleration: [0.1, 0.2, 0.3],
+              gyroscope: [0.01, 0.02, 0.03],
+              speed: 45.5
+            }
+          },
+          PredictSeverityResponse: {
+            type: 'object',
+            properties: {
+              severity: { type: 'number', description: 'Predicted severity score (0-10)' }
+            },
+            example: {
+              severity: 7.5
+            }
+          },
+          CompareModelsResponse: {
+            type: 'object',
+            properties: {
+              lstm: {
+                type: 'object',
+                properties: {
+                  accuracy: { type: 'number' },
+                  precision: { type: 'number' },
+                  recall: { type: 'number' },
+                  f1: { type: 'number' }
+                }
+              },
+              xgboost: {
+                type: 'object',
+                properties: {
+                  accuracy: { type: 'number' },
+                  precision: { type: 'number' },
+                  recall: { type: 'number' },
+                  f1: { type: 'number' }
+                }
+              }
+            },
+            example: {
+              lstm: {
+                accuracy: 0.92,
+                precision: 0.89,
+                recall: 0.91,
+                f1: 0.90
+              },
+              xgboost: {
+                accuracy: 0.88,
+                precision: 0.85,
+                recall: 0.87,
+                f1: 0.86
+              }
+            }
+          },
+          GetWeightsResponse: {
+            type: 'object',
+            properties: {
+              lighting: { type: 'number' },
+              crowd: { type: 'number' },
+              police: { type: 'number' },
+              hospital: { type: 'number' },
+              potholes: { type: 'number' },
+              incidents: { type: 'number' },
+              accidents: { type: 'number' }
+            },
+            example: {
+              lighting: 0.20,
+              crowd: 0.15,
+              police: 0.20,
+              hospital: 0.20,
+              potholes: 0.10,
+              incidents: 0.15,
+              accidents: 0.10
+            }
           }
         }
       }
