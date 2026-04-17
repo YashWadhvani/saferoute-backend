@@ -525,6 +525,90 @@ function setupSwagger(app) {
             }
           }
         }
+      },
+      '/api/ml/predict-severity': {
+        post: {
+          summary: 'Predict pothole severity',
+          description: 'Predict the severity of a pothole event based on sensor data.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/PredictSeverityRequest'
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Predicted severity score',
+              content: {
+                'application/json': {
+                  schema: {
+                    $ref: '#/components/schemas/PredictSeverityResponse'
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Invalid input data'
+            }
+          }
+        }
+      },
+      '/api/ml/compare-models': {
+        post: {
+          summary: 'Compare ML models',
+          description: 'Compare the performance of LSTM and XGBoost models on a given dataset.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    dataset: { type: 'string', description: 'Path to the dataset file' }
+                  },
+                  required: ['dataset']
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Comparison metrics for both models',
+              content: {
+                'application/json': {
+                  schema: {
+                    $ref: '#/components/schemas/CompareModelsResponse'
+                  }
+                }
+              }
+            },
+            400: {
+              description: 'Invalid dataset path or format'
+            }
+          }
+        }
+      },
+      '/api/ml/get-weights': {
+        get: {
+          summary: 'Get safety factor weights',
+          description: 'Retrieve the weights used for safety factor calculations.',
+          responses: {
+            200: {
+              description: 'Safety factor weights',
+              content: {
+                'application/json': {
+                  schema: {
+                    $ref: '#/components/schemas/GetWeightsResponse'
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   };
